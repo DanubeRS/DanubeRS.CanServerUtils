@@ -1,2 +1,2 @@
 # CANServer Utils
-A DotNet utility for reading, decoding, and exporting binary CANServer logs in a performant .NET way
+A .NET utility for reading, decoding, and exporting binary CANServer logs in a fast and efficient way
