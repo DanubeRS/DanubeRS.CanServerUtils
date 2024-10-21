@@ -6,10 +6,6 @@ namespace DanubeRS.CanServerUtils.Lib.DBC;
 
 public class Database
 {
-    public Database()
-    {
-    }
-
     public void AddFile(TextReader reader)
     {
         var tokenizer = DbcTokenizer.Instance;

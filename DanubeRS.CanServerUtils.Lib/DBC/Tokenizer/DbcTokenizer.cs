@@ -17,10 +17,20 @@ public static class DbcTokenizer
 
     public static Tokenizer<DbcTokens> Instance =>
         new TokenizerBuilder<DbcTokens>()
-            .Match(Span.EqualTo("\n\n"), DbcTokens.DefinitionEnd)
+            .Match(Span.Regex("[\n]{2,}"), DbcTokens.DefinitionEnd)
+            .Match(Numerics.Integer, DbcTokens.Integer)
+            .Match(Numerics.DecimalDouble, DbcTokens.Double)
             .Ignore(Character.WhiteSpace)
             .Match(Character.EqualTo(':'), DbcTokens.Colon)
             .Match(Identifier.CStyle, DbcTokens.Identifier)
             .Match(StringValue, DbcTokens.String)
+            .Match(Character.EqualTo('('), DbcTokens.LParen)
+            .Match(Character.EqualTo(')'), DbcTokens.RParen)
+            .Match(Character.EqualTo('['), DbcTokens.LSqParen)
+            .Match(Character.EqualTo(']'), DbcTokens.RSqParen)
+            .Match(Character.EqualTo('@'), DbcTokens.AtSymbol)
+            .Match(Character.EqualTo('|'), DbcTokens.Pipe)
+            .Match(Character.EqualTo(','), DbcTokens.Comma)
+            .Match(Character.EqualTo('+').Or(Character.EqualTo('-')), DbcTokens.Sign)
             .Build();
 }
