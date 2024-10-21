@@ -8,7 +8,8 @@ using Microsoft.Extensions.Logging;
 var loggerFactory = LoggerFactory.Create(b => { b.AddConsole(); });
 
 var dbc = new Database();
-var testString = @"VERSION """"
+var testString = @"
+VERSION """"
 
 NS_ : 
 	NS_DESC_
@@ -39,6 +40,10 @@ NS_ :
 	BU_EV_REL_
 	BU_BO_REL_
 	SG_MUL_VAL_
+
+BS_:
+
+BU_: Receiver ChassisBus VehicleBus PartyBus
 ";
 await using var dbcStream = File.OpenRead("./database.dbc");
 using var dbcReader = new StringReader(testString);
