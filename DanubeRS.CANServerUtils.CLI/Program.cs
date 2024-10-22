@@ -3116,6 +3116,7 @@ BO_ 1025 ID401BrickVoltages: 8 VehicleBus
  SG_ Brick108 m36 : 16|16@1+ (0.0001,0) [0|0] ""V""  Receiver
  SG_ Brick109 m36 : 32|16@1+ (0.0001,0) [0|0] ""V""  Receiver
  SG_ Brick110 m36 : 48|16@1+ (0.0001,0) [0|0] ""V""  Receiver
+
 ";
 await using var dbcStream = File.OpenRead("./database.dbc");
 using var dbcReader = new StringReader(testString);
