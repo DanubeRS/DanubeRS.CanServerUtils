@@ -2,7 +2,7 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DanubeRS.CANServerUtils.CLI", "DanubeRS.CANServerUtils.CLI\DanubeRS.CANServerUtils.CLI.csproj", "{574C217A-93D5-445A-92F8-06B172638926}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DanubeRS.CanServerUtils.Lib", "DanubeRS.CanServerUtils.Lib\DanubeRS.CanServerUtils.Lib.csproj", "{3592532D-9427-4940-83FA-1153E4AE5AA0}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DanubeRS.CanServerUtils.Library", "DanubeRS.CanServerUtils.Library\DanubeRS.CanServerUtils.Library.csproj", "{3592532D-9427-4940-83FA-1153E4AE5AA0}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

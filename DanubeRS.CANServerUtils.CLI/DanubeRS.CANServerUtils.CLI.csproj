@@ -14,7 +14,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\DanubeRS.CanServerUtils.Lib\DanubeRS.CanServerUtils.Lib.csproj"/>
+        <ProjectReference Include="..\DanubeRS.CanServerUtils.Library\DanubeRS.CanServerUtils.Library.csproj" />
     </ItemGroup>
 
 </Project>

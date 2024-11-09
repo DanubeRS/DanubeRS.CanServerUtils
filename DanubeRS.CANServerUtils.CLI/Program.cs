@@ -4,9 +4,7 @@ using DanubeRS.CanServerUtils.Lib.BinaryLogs;
 using DanubeRS.CanServerUtils.Lib.DBC;
 using Microsoft.Extensions.Logging;
 
-var loggerFactory = LoggerFactory.Create(b => { 
-    b.AddConsole();
-});
+var loggerFactory = LoggerFactory.Create(b => { b.AddConsole(); });
 
 var dbc = new Database();
 await using var dbcStream = File.OpenRead("./database.dbc");
@@ -28,9 +26,12 @@ foreach (var file in files)
             return;
         if (dbc.TryParseBinaryMessage(frame.FrameId, frame.FramePayload, out var value))
         {
-          logger.LogDebug("Successfully Parsed message #{MessageNumber} @ {MessageTime} (ID:{FrameId})", frames, frame.FrameTime, frame.FrameId);
-          logger.LogTrace("{MessageId} {MessageName} {Signals}", value.MessageId, value.MessageName, value.Signals.Select(s => $"{s.SignalName}"));
+            logger.LogDebug("Successfully Parsed message #{MessageNumber} @ {MessageTime} (ID:{FrameId})", frames,
+                frame.FrameTime, frame.FrameId);
+            logger.LogTrace("{MessageId} {MessageName} {Signals}", value.MessageId, value.MessageName,
+                value.Signals.Select(s => $"{s.SignalName}"));
         }
+
         frames++;
         if (frames % 1000 == 0)
             logger.LogInformation("Processed {frames} frames", frames);

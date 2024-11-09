@@ -50,7 +50,7 @@ public enum DbcTokens
 
     [Token(Category = "value", Example = "2E-005")]
     Sci,
-    
+
     [Token(Category = "grammar", Example = ";")]
     Semicolon
 }

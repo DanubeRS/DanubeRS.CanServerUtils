@@ -14,7 +14,7 @@ public class Database
         public readonly MessageHeader Header = message.Header;
         public readonly bool IsMultiplexed = message.Signals.Any(s => s.Multiplex is { IsSwitch: true });
     }
-    
+
     private Dictionary<int, MessageDefinition> _messageDefn = new Dictionary<int, MessageDefinition>();
 
     public void AddFile(TextReader reader)
@@ -35,7 +35,7 @@ public class Database
         }
     }
 
-    public bool TryParseBinaryMessage(int frameId, byte[] data, [NotNullWhen(true)]out MessageValue? value)
+    public bool TryParseBinaryMessage(int frameId, byte[] data, [NotNullWhen(true)] out MessageValue? value)
     {
         value = null;
         if (!_messageDefn.TryGetValue(frameId, out var defn))
@@ -72,20 +72,21 @@ public class Database
         int multiplexByte = multiplexSignal.StartBit / sizeof(byte);
         var multiplexBit = multiplexSignal.StartBit % sizeof(byte);
         int multiplexValue = data[multiplexByte] >> (sizeof(byte) - multiplexBit - multiplexSignal.Size);
-        
+
         if (multiplexSignal.Order == Endianness.Little)
-        
-        
-        foreach (var signal in defn.Signals.Where(s => s.Multiplex != null && s.Multiplex.SwitchValue == multiplexValue))
-        {
-            signalValues.Add(new SignalValue(signal.Name));
-        }
+
+
+            foreach (var signal in defn.Signals.Where(s =>
+                         s.Multiplex != null && s.Multiplex.SwitchValue == multiplexValue))
+            {
+                signalValues.Add(new SignalValue(signal.Name));
+            }
 
         value = new MessageValue(defn.Header.Id, defn.Header.Name, signalValues.ToArray(), null);
         return true;
-
     }
 }
 
 public record SignalValue(string SignalName);
+
 public record MessageValue(int MessageId, string MessageName, SignalValue[] Signals, int? MultiplexValue);

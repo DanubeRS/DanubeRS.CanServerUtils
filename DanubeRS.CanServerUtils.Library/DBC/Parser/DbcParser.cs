@@ -214,11 +214,13 @@ public static class DbcParser
         select new AttributeDefinition(objectType, attributeName, attributeValueType);
 
     private static TokenListParser<DbcTokens, AttributeDefaultValue> IntegerAttributeDefaultValue { get; } =
-        Token.EqualTo(DbcTokens.Integer).Select(i => (AttributeDefaultValue)new IntegerAttributeDefaultValue(int.Parse(i.ToStringValue())));
-    
+        Token.EqualTo(DbcTokens.Integer).Select(i =>
+            (AttributeDefaultValue)new IntegerAttributeDefaultValue(int.Parse(i.ToStringValue())));
+
     private static TokenListParser<DbcTokens, AttributeDefaultValue> DoubleAttributeDefaultValue { get; } =
-        Token.EqualTo(DbcTokens.Double).Select(i => (AttributeDefaultValue)new DoubleAttributeDefaultValue(double.Parse(i.ToStringValue())));
-    
+        Token.EqualTo(DbcTokens.Double).Select(i =>
+            (AttributeDefaultValue)new DoubleAttributeDefaultValue(double.Parse(i.ToStringValue())));
+
     private static TokenListParser<DbcTokens, AttributeDefaultValue> StringAttributeDefaultValue { get; } =
         QuotedString.Select(i => (AttributeDefaultValue)new StringAttributeDefaultValue(i));
 
@@ -231,7 +233,7 @@ public static class DbcParser
         from attributeDefaultValue in AttributeDefaultValue
         from end in Token.EqualTo(DbcTokens.Semicolon)
         select new AttributeDefault(attributeName, attributeDefaultValue);
-    
+
     private static TokenListParser<DbcTokens, AttributeObjectValue> GlobalObjectValue { get; } =
         from value in AttributeDefaultValue
         select (AttributeObjectValue)new GlobalObjectValue(value);
@@ -247,14 +249,14 @@ public static class DbcParser
         from messageId in Integer
         from value in AttributeDefaultValue
         select (AttributeObjectValue)new MessageObjectValue(messageId, value);
-    
+
     private static TokenListParser<DbcTokens, AttributeObjectValue> SignalObjectValue { get; } =
         from keyword in NamedIdentifier("SG_")
         from messageId in Integer
         from signalName in Identifier
         from value in AttributeDefaultValue
         select (AttributeObjectValue)new SignalObjectValue(messageId, signalName, value);
-    
+
     private static TokenListParser<DbcTokens, AttributeObjectValue> EnvironmentObjectValue { get; } =
         from keyword in NamedIdentifier("EV_")
         from name in Identifier
@@ -270,14 +272,16 @@ public static class DbcParser
         from attributeValue in AttributeObjectValue
         from end in Token.EqualTo(DbcTokens.Semicolon)
         select new AttributeValue(attributeName, attributeValue);
-    
+
     private static TokenListParser<DbcTokens, ValueDescription> ValueDescription { get; } =
         from keyword in NamedIdentifier("VAL_")
         from messageId in Integer
         from signalName in Identifier
-        from valueDescriptionValues in Integer.Then((i => QuotedString.Select(s => new KeyValuePair<int,string>(i, s)))).Many()
+        from valueDescriptionValues in Integer
+            .Then((i => QuotedString.Select(s => new KeyValuePair<int, string>(i, s)))).Many()
         from end in Token.EqualTo(DbcTokens.Semicolon)
-        select new ValueDescription(messageId, signalName, valueDescriptionValues.ToDictionary(kvp => kvp.Key, kvp => kvp.Value));
+        select new ValueDescription(messageId, signalName,
+            valueDescriptionValues.ToDictionary(kvp => kvp.Key, kvp => kvp.Value));
 
     public static TokenListParser<DbcTokens, ParsedDb> Database { get; } =
         from version in Version
@@ -296,23 +300,37 @@ public static class DbcParser
             .Many()
         from valueDescriptions in ValueDescription
             .Many()
-        select new ParsedDb(version, newSymbols, nodes, messages.OrderBy(m => m.Header.Id).ToArray(), attributeDefinitions, attributeDefaults, attributeValues, valueDescriptions);
+        select new ParsedDb(version, newSymbols, nodes, messages.OrderBy(m => m.Header.Id).ToArray(),
+            attributeDefinitions, attributeDefaults, attributeValues, valueDescriptions);
 }
 
 public sealed record ValueDescription(int MessageId, string SignalName, Dictionary<int, string> Values);
+
 public sealed record EnvironmentObjectValue(string Name, AttributeDefaultValue Value) : AttributeObjectValue(Value);
-public sealed record SignalObjectValue(int MessageId, string SignalName, AttributeDefaultValue Value) : AttributeObjectValue(Value);
+
+public sealed record SignalObjectValue(int MessageId, string SignalName, AttributeDefaultValue Value)
+    : AttributeObjectValue(Value);
+
 public sealed record MessageObjectValue(int MessageId, AttributeDefaultValue Value) : AttributeObjectValue(Value);
+
 public sealed record NodeObjectValue(string Name, AttributeDefaultValue Value) : AttributeObjectValue(Value);
+
 public sealed record GlobalObjectValue(AttributeDefaultValue Value) : AttributeObjectValue(Value);
+
 public abstract record AttributeObjectValue(AttributeDefaultValue Value);
+
 public sealed record AttributeValue(string Name, AttributeObjectValue Value);
 
 public sealed record StringAttributeDefaultValue(string Value) : AttributeDefaultValue;
+
 public sealed record DoubleAttributeDefaultValue(double Value) : AttributeDefaultValue;
+
 public sealed record IntegerAttributeDefaultValue(int Value) : AttributeDefaultValue;
+
 public abstract record AttributeDefaultValue();
+
 public record AttributeDefault(string AttributeName, AttributeDefaultValue Value);
+
 public record AttributeDefinition(string? ObjectType, string Name, AttributeValueType ValueType);
 
 public sealed record EnumAttributeValueType(string[] Values) : AttributeValueType();
@@ -365,9 +383,9 @@ public record ParsedDb(
     Nodes Nodes,
     Message[] Messages,
     AttributeDefinition[] AttributeDefinitions,
-    AttributeDefault[] attributeDefaults,
-    AttributeValue[] attributeValues,
-    ValueDescription[] valueDescriptions);
+    AttributeDefault[] AttributeDefaults,
+    AttributeValue[] AttributeValues,
+    ValueDescription[] ValueDescriptions);
 
 public record Version(string VersionString);
 
