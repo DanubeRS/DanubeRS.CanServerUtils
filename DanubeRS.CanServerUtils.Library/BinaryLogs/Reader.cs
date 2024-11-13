@@ -92,7 +92,7 @@ public class Reader
 
     private LogReaderFrame? ReadV2Frame(byte start)
     {
-        throw new NotImplementedException();
+        // throw new NotImplementedException();
         while (true)
         {
             // CAN Frame
@@ -120,7 +120,12 @@ public class Reader
                 var framePayload = new byte[frameLength];
                 var read = _stream.Read(framePayload);
                 if (read != frameLength)
+                {
+                    //TODO
+                    return null;
                     throw new Exception("Invalid Frame");
+                }
+
                 return new LogReaderFrame(frameTime, frameId, busId, framePayload);
             }
             else

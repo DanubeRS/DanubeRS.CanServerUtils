@@ -8,13 +8,14 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="CommandLineParser" Version="2.9.1"/>
         <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.1"/>
         <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.1"/>
         <PackageReference Include="System.Memory" Version="4.5.5"/>
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\DanubeRS.CanServerUtils.Library\DanubeRS.CanServerUtils.Library.csproj" />
+        <ProjectReference Include="..\DanubeRS.CanServerUtils.Library\DanubeRS.CanServerUtils.Library.csproj"/>
     </ItemGroup>
 
 </Project>

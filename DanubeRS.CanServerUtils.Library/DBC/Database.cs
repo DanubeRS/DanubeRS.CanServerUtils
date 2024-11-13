@@ -65,10 +65,12 @@ public class Database
 
     private bool TryParseMultiplexedMessage(MessageDefinition defn, byte[] data, out MessageValue? value)
     {
+        value = default;
         var signalValues = new List<SignalValue>();
         var multiplexSignal = defn.Signals.Single(s => s.Multiplex is { IsSwitch: true });
 
         // TODO need to handle larger (if possible?) and cross-byte multiplex values
+        return false;
         int multiplexByte = multiplexSignal.StartBit / sizeof(byte);
         var multiplexBit = multiplexSignal.StartBit % sizeof(byte);
         int multiplexValue = data[multiplexByte] >> (sizeof(byte) - multiplexBit - multiplexSignal.Size);

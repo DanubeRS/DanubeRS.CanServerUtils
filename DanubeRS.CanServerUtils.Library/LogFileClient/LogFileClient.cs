@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace DanubeRS.CanServerUtils.Lib.LogFileClient;
 
-public class LogFileClient
+public class LogFileClient : IDisposable
 {
     private readonly HttpClient _client;
     private const string Cont = "---cont---";
@@ -29,7 +29,7 @@ public class LogFileClient
         var response = await _client.PostAsync("/logs/save", new FormUrlEncodedContent(new Dictionary<string, string?>()
         {
             { "logmode", type.ToString("D") },
-            { "interval", interval?.ToString("D")},
+            { "interval", interval?.ToString("D") },
             { "interval_mode3", filterInterval.ToString("D") },
         }));
         response.EnsureSuccessStatusCode();
@@ -38,7 +38,7 @@ public class LogFileClient
     public async Task<(LogFileRecord[] files, bool isEnd)> GetLogFiles(long offset = 0)
     {
         var isEnd = true;
-        var logFiles = await _client.GetFromJsonAsync<LogFileRecord[]>("/logs/load");
+        var logFiles = await _client.GetFromJsonAsync<LogFileRecord[]>("/logs/files?offset=" + offset);
         if (logFiles == null)
             return ([], true);
         if (logFiles.Any(f => f.Name == Cont))
@@ -56,6 +56,11 @@ public class LogFileClient
     {
         var response = await _client.GetAsync("/stats");
         return response.IsSuccessStatusCode;
+    }
+
+    public void Dispose()
+    {
+        _client.Dispose();
     }
 }
 
