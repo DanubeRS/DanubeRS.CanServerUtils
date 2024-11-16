@@ -12,7 +12,7 @@ using Microsoft.Extensions.Logging;
 var loggerFactory = LoggerFactory.Create(b =>
 {
     b.AddConsole();
-    b.SetMinimumLevel(LogLevel.Information);
+    b.SetMinimumLevel(LogLevel.Trace);
 });
 
 var parserResult = Parser.Default.ParseArguments<DownloadOptions, ParseOptions>(args);
@@ -26,7 +26,7 @@ async Task<int> Download(DownloadOptions options)
 
 async Task<int> Parse(ParseOptions options)
 {
-    var database = new Database();
+    var database = new Database(loggerFactory.CreateLogger<Database>());
     foreach (var dbc in options.Databases)
     {
         await using var dbcStream = File.OpenRead(dbc.Replace("~",

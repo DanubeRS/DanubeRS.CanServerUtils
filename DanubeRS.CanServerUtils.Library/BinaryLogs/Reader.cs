@@ -92,7 +92,6 @@ public class Reader
 
     private LogReaderFrame? ReadV2Frame(byte start)
     {
-        // throw new NotImplementedException();
         while (true)
         {
             // CAN Frame
