@@ -46,12 +46,15 @@ public class Database(ILogger<Database> logger)
             return false;
         }
 
-        if (defn.IsMultiplexed)
-        {
-            return TryParseMultiplexedMessage(defn, data, out value);
-        }
+        var bitArray = new BitArray(data);
+        if (logger.IsEnabled(LogLevel.Trace))
+            logger.LogTrace("Data\n{BitArrayData}", GetBitArrayDataForLog(bitArray));
 
-        return TryParseRegularMessage(defn, data, out value);
+        return defn.IsMultiplexed switch
+        {
+            true => TryParseMultiplexedMessage(defn, data, out value),
+            false => TryParseRegularMessage(defn, data, out value)
+        };
     }
 
     private bool TryParseRegularMessage(MessageDefinition defn, byte[] data, out MessageValue? value)
@@ -71,8 +74,7 @@ public class Database(ILogger<Database> logger)
         value = default;
         var bitArray = new BitArray(data);
         
-        if (logger.IsEnabled(LogLevel.Trace))
-            logger.LogTrace("Data\n{BitArrayData}", GetBitArrayDataForLog(bitArray));
+
         
         var signalValues = new List<SignalValue>();
         var multiplexSignal = defn.Signals.Single(s => s.Multiplex is { IsSwitch: true });
@@ -84,7 +86,7 @@ public class Database(ILogger<Database> logger)
             var rawValue = GetRawValueFromBits(signal, bitArray);
             var scaledValue = rawValue * signal.Factor + signal.Offset;
             var signalValue = new SignalValue(signal.Name, scaledValue);
-            logger.LogTrace("Signal: {Name}, Raw Value: {RawValue}, Scaled Value: {ScaledValue}{Units}", signal.Name,
+            logger.LogDebug("Signal: {Name}, Raw Value: {RawValue}, Scaled Value: {ScaledValue}{Units}", signal.Name,
                 rawValue, scaledValue, signal.Unit.Trim('"'));
             signalValues.Add(signalValue);
         }

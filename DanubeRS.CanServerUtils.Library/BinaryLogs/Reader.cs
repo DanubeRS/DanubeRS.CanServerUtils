@@ -94,16 +94,21 @@ public class Reader
     {
         while (true)
         {
-            // CAN Frame
-            if ((start & 0b11110000) == 0xB0)
+            // Time sync frame
+            if (start == 0xA0)
             {
-                //TODO endian-ness
-                var frameData = new byte[6];
-                _stream.ReadExactly(frameData, 1, 5);
-                frameData[0] = start;
+                var timeData = new byte[8];
+                _stream.ReadExactly(timeData, 0, 8);
+                _lastSyncTime = BitConverter.ToUInt64(timeData, 0);
+            }
+            // CAN Frame
+            else if ((start & 0b11110000) == 0xB0)
+            {
+                var frameData = new byte[5];
+                _stream.ReadExactly(frameData, 0, 5);
 
-                var frameTimeOffset = (frameData[0] & 0x0F) + (frameData[1] << 4) + (frameData[2] << 12) +
-                                      (((frameData[3] & 0xF8) >> 3) << 20);
+                var frameTimeOffset = (start & 0x0F) + (frameData[0] << 4) + (frameData[1] << 12) +
+                                      (((frameData[2] & 0xF8) >> 3) << 20);
                 var frameTime = _lastSyncTime + (ulong)frameTimeOffset;
 
                 var frameId = ((frameData[2] & 0x07) << 8) + (frameData[3] & 0xFF);
@@ -130,11 +135,11 @@ public class Reader
             else
             {
                 _logger.LogDebug("Skipping frame {byte:x8}", start & 0b11110000);
-                var read = _stream.ReadByte();
-                if (read == -1)
-                    return null;
-                start = (byte)read;
             }
+            var nextStart = _stream.ReadByte();
+            if (nextStart == -1)
+                return null;
+            start = (byte)nextStart;
         }
     }
 
@@ -169,7 +174,6 @@ public class Reader
                             _frameDataBuffer, 0) * 1000;
 
                     var frameTime = _lastSyncTime + (ulong)frameTimeOffset;
-
 
                     var frameId = BitConverter.ToUInt16(_frameDataBuffer, 2);
                     // Length & Bus stored in same byte

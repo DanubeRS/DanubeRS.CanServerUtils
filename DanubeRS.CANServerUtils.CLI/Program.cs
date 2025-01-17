@@ -46,6 +46,7 @@ async Task<int> Parse(ParseOptions options)
     var sw = new Stopwatch();
     foreach (var file in files)
     {
+        logger.LogDebug("Reading file {LogFileName}", file.FullName);
         await using var fs = file.OpenRead();
         var reader = await Reader.Open(fs, loggerFactory.CreateLogger<Reader>());
         var frames = 0;
@@ -55,6 +56,7 @@ async Task<int> Parse(ParseOptions options)
             var frame = reader.GetNextFrame();
             if (frame == null)
                 break;
+            logger.LogDebug("Decoding frame {FrameId:x8} @ {FrameTime}", frame.FrameId, frame.FrameTime);
             if (database.TryParseBinaryMessage(frame.FrameId, frame.FramePayload, out var value))
             {
                 logger.LogDebug("Successfully Parsed message #{MessageNumber} @ {MessageTime} (ID:{FrameId})", frames,
