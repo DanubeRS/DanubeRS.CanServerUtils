@@ -53,20 +53,45 @@ public class Database(ILogger<Database> logger)
         return defn.IsMultiplexed switch
         {
             true => TryParseMultiplexedMessage(defn, data, out value),
-            false => TryParseRegularMessage(defn, data, out value)
+            false => TryParseRegularMessage(defn, bitArray, out value)
         };
     }
 
-    private bool TryParseRegularMessage(MessageDefinition defn, byte[] data, out MessageValue? value)
+    private bool TryParseRegularMessage(MessageDefinition defn, BitArray data, out MessageValue? value)
     {
+        value = null;
         var signalValues = new List<SignalValue>();
+        var lastSignal = defn.Signals.OrderByDescending(s => s.StartBit).First();
+        // Message size is incompatable
+        if (lastSignal.StartBit + lastSignal.Size > data.Length) return false;
         foreach (var signal in defn.Signals.OrderBy(s => s.StartBit))
         {
-            signalValues.Add(new SignalValue(signal.Name, 0));
+            var bytes = new byte[8];
+            BitsToBytes(data, signal.StartBit, signal.Size, bytes);
+
+            var rawValue = signal.ValueType == ValueType.Unsigned ? (double)BitConverter.ToUInt64(bytes, 0) : (double)BitConverter.ToInt64(bytes, 0);
+            
+            signalValues.Add(new SignalValue(signal.Name, signal.Offset + rawValue * signal.Factor));
         }
 
         value = new MessageValue(defn.Header.Id, defn.Header.Name, signalValues.ToArray(), null);
         return true;
+    }
+
+    private void BitsToBytes(BitArray bitArray, int offset, int length, byte[] bytes)
+    {
+        int byteIdx = 0,
+         bitIdx = 0;
+        
+        for (var i = 0; i < length; i++) {
+            if (bitArray[offset + i])
+                bytes[byteIdx] |= (byte)(1 << bitIdx);
+
+            bitIdx++;
+            if (bitIdx != 8) continue;
+            bitIdx = 0;
+            byteIdx++;
+        }
     }
 
     private bool TryParseMultiplexedMessage(MessageDefinition defn, byte[] data, out MessageValue? value)
