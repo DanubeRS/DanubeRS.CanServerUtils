@@ -12,7 +12,7 @@ using Microsoft.Extensions.Logging;
 var loggerFactory = LoggerFactory.Create(b =>
 {
     b.AddConsole();
-    b.SetMinimumLevel(LogLevel.Trace);
+    b.SetMinimumLevel(LogLevel.Information);
 });
 
 var parserResult = Parser.Default.ParseArguments<DownloadOptions, ParseOptions>(args);
@@ -49,6 +49,12 @@ async Task<int> Parse(ParseOptions options)
         logger.LogDebug("Reading file {LogFileName}", file.FullName);
         await using var fs = file.OpenRead();
         var reader = await Reader.Open(fs, loggerFactory.CreateLogger<Reader>());
+        if (reader == null)
+        {
+            logger.LogWarning("Could not open file {LogFileName}", file.FullName);
+            continue;
+        }
+
         var frames = 0;
         sw.Restart();
         while (true)
@@ -57,21 +63,31 @@ async Task<int> Parse(ParseOptions options)
             if (frame == null)
                 break;
             logger.LogDebug("Decoding frame {FrameId:x8} @ {FrameTime}", frame.FrameId, frame.FrameTime);
-            if (database.TryParseBinaryMessage(frame.FrameId, frame.FramePayload, out var value))
+            if (database.TryParseBinaryMessage(frame.FrameId, frame.FramePayload, out var value, out var defn))
             {
                 logger.LogDebug("Successfully Parsed message #{MessageNumber} @ {MessageTime} (ID:{FrameId})", frames,
                     frame.FrameTime, frame.FrameId);
                 logger.LogTrace("{MessageId} {MessageName} {Signals}", value.MessageId, value.MessageName,
                     value.Signals.Select(s => $"{s.SignalName}"));
+
+                var signalName = "VCFRONT_coolantFlowBatActual";
+                var matched = value.Signals.SingleOrDefault(v => v.SignalName == signalName);
+                if (matched != null)
+                {
+                    var signalDfn = defn.Signals.First(s => s.Name == signalName);
+                    logger.LogInformation("({Timestamp:yyyy-MM-ddTHH:mm:ssZ}) {SignalName} - {Value:F2} ({Units})", DateTime.UnixEpoch.AddMicroseconds(frame.FrameTime), signalName, matched.Value, signalDfn.Unit);
+                }
             }
 
             frames++;
             if (frames % 10000 == 0)
-                logger.LogDebug("Processed {frames} frames ({framesSec}/sec)", frames, (frames/sw.Elapsed.TotalSeconds));
+                logger.LogDebug("Processed {frames} frames ({framesSec}/sec)", frames,
+                    (frames / sw.Elapsed.TotalSeconds));
         }
-        
+
         sw.Stop();
-        logger.LogInformation("Processed {frames} frames from {path} in {elapsed} ({framesSec}/sec)", frames, file.Name, sw.Elapsed.TotalSeconds, (frames/sw.Elapsed.TotalSeconds));
+        logger.LogInformation("Processed {frames} frames from {path} in {elapsed} ({framesSec}/sec)", frames, file.Name,
+            sw.Elapsed.TotalSeconds, (frames / sw.Elapsed.TotalSeconds));
     }
 
     return 0;

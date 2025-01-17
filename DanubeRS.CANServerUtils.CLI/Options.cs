@@ -20,6 +20,7 @@ public class ParseOptions
 {
     [Option('i', "input", Required = false, HelpText = "Remove files after download")]
     public string? InputPath { get; set; }
+
     [Option('d', "database", Required = true, HelpText = "Database files to use for message decoding")]
     public IEnumerable<string> Databases { get; set; }
 }

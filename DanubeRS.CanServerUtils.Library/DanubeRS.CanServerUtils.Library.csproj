@@ -15,7 +15,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="DBC\Decoder\" />
+        <Folder Include="DBC\Decoder\"/>
     </ItemGroup>
 
 </Project>

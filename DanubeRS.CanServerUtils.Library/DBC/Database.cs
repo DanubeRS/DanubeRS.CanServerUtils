@@ -11,7 +11,7 @@ namespace DanubeRS.CanServerUtils.Lib.DBC;
 
 public class Database(ILogger<Database> logger)
 {
-    private class MessageDefinition(Message message)
+    public class MessageDefinition(Message message)
     {
         public readonly Signal[] Signals = message.Signals;
         public readonly MessageHeader Header = message.Header;
@@ -19,6 +19,7 @@ public class Database(ILogger<Database> logger)
     }
 
     private readonly Dictionary<int, MessageDefinition> _messageDefn = new();
+    private readonly byte[] _signalValueBytes = new byte[8];
 
     public void AddFile(TextReader reader)
     {
@@ -38,10 +39,10 @@ public class Database(ILogger<Database> logger)
         }
     }
 
-    public bool TryParseBinaryMessage(int frameId, byte[] data, [NotNullWhen(true)] out MessageValue? value)
+    public bool TryParseBinaryMessage(int frameId, byte[] data, [NotNullWhen(true)] out MessageValue? value, [NotNullWhen(true)] out MessageDefinition? defn)
     {
         value = null;
-        if (!_messageDefn.TryGetValue(frameId, out var defn))
+        if (!_messageDefn.TryGetValue(frameId, out defn))
         {
             return false;
         }
@@ -52,7 +53,7 @@ public class Database(ILogger<Database> logger)
 
         return defn.IsMultiplexed switch
         {
-            true => TryParseMultiplexedMessage(defn, data, out value),
+            true => TryParseMultiplexedMessage(defn, bitArray, out value),
             false => TryParseRegularMessage(defn, bitArray, out value)
         };
     }
@@ -60,30 +61,33 @@ public class Database(ILogger<Database> logger)
     private bool TryParseRegularMessage(MessageDefinition defn, BitArray data, out MessageValue? value)
     {
         value = null;
-        var signalValues = new List<SignalValue>();
         var lastSignal = defn.Signals.OrderByDescending(s => s.StartBit).First();
         // Message size is incompatable
         if (lastSignal.StartBit + lastSignal.Size > data.Length) return false;
-        foreach (var signal in defn.Signals.OrderBy(s => s.StartBit))
-        {
-            var bytes = new byte[8];
-            BitsToBytes(data, signal.StartBit, signal.Size, bytes);
 
-            var rawValue = signal.ValueType == ValueType.Unsigned ? (double)BitConverter.ToUInt64(bytes, 0) : (double)BitConverter.ToInt64(bytes, 0);
-            
-            signalValues.Add(new SignalValue(signal.Name, signal.Offset + rawValue * signal.Factor));
-        }
-
-        value = new MessageValue(defn.Header.Id, defn.Header.Name, signalValues.ToArray(), null);
+        value = new MessageValue(defn.Header.Id, defn.Header.Name,
+            defn.Signals.OrderBy(s => s.StartBit).Select(signal => GetSignalValue(data, signal)).ToArray(), null);
         return true;
+    }
+
+    private SignalValue GetSignalValue(BitArray data, Signal signal)
+    {
+        Array.Clear(_signalValueBytes);
+        BitsToBytes(data, signal.StartBit, signal.Size, _signalValueBytes);
+        var rawValue = signal.ValueType == ValueType.Unsigned
+            ? BitConverter.ToUInt64(_signalValueBytes, 0)
+            : (double)BitConverter.ToInt64(_signalValueBytes, 0);
+        var signalValue = new SignalValue(signal.Name, signal.Offset + rawValue * signal.Factor);
+        return signalValue;
     }
 
     private void BitsToBytes(BitArray bitArray, int offset, int length, byte[] bytes)
     {
         int byteIdx = 0,
-         bitIdx = 0;
-        
-        for (var i = 0; i < length; i++) {
+            bitIdx = 0;
+
+        for (var i = 0; i < length; i++)
+        {
             if (bitArray[offset + i])
                 bytes[byteIdx] |= (byte)(1 << bitIdx);
 
@@ -94,42 +98,29 @@ public class Database(ILogger<Database> logger)
         }
     }
 
-    private bool TryParseMultiplexedMessage(MessageDefinition defn, byte[] data, out MessageValue? value)
+    private bool TryParseMultiplexedMessage(MessageDefinition defn, BitArray data, out MessageValue? value)
     {
         value = default;
         var bitArray = new BitArray(data);
-        
 
-        
-        var signalValues = new List<SignalValue>();
+
         var multiplexSignal = defn.Signals.Single(s => s.Multiplex is { IsSwitch: true });
 
-        var switchValue = GetRawValueFromBits(multiplexSignal, bitArray);
+        var switchBytes = new byte[2];
+        BitsToBytes(data, multiplexSignal.StartBit, multiplexSignal.Size, switchBytes);
+        var switchValue = BitConverter.ToUInt16(switchBytes);
+        var filteredSignals = defn.Signals.Where(s => s.Multiplex != null && s.Multiplex.SwitchValue == switchValue)
+            .ToArray();
 
-        foreach (var signal in defn.Signals.Where(s => s.Multiplex != null && s.Multiplex.SwitchValue == (int)switchValue ))
-        {
-            var rawValue = GetRawValueFromBits(signal, bitArray);
-            var scaledValue = rawValue * signal.Factor + signal.Offset;
-            var signalValue = new SignalValue(signal.Name, scaledValue);
-            logger.LogDebug("Signal: {Name}, Raw Value: {RawValue}, Scaled Value: {ScaledValue}{Units}", signal.Name,
-                rawValue, scaledValue, signal.Unit.Trim('"'));
-            signalValues.Add(signalValue);
-        }
+        var lastSignal = filteredSignals.OrderByDescending(s => s.StartBit).FirstOrDefault();
+        if (lastSignal == null) return false;
+        // Message size is incompatable
+        if (lastSignal.StartBit + lastSignal.Size > data.Length) return false;
 
-        value = new MessageValue(defn.Header.Id, defn.Header.Name, signalValues.ToArray(), (uint?)switchValue);
+        value = new MessageValue(defn.Header.Id, defn.Header.Name,
+            filteredSignals.Select(signal => GetSignalValue(data, signal)).ToArray(), (uint?)switchValue);
 
         return true;
-    }
-
-    private ulong GetRawValueFromBits(Signal multiplexSignal, BitArray bitArray)
-    {
-        logger.LogTrace("Decoding {SignalName}", multiplexSignal.Name);
-        var switchBits = new BitArray(Enumerable.Range(0, multiplexSignal.Size)
-            .Select(i => bitArray.Get(i + multiplexSignal.StartBit)).ToArray());
-        var switchBytes = new byte[sizeof(long)];
-        switchBits.CopyTo(switchBytes, 0);
-        var switchValue = BitConverter.ToUInt64(switchBytes);
-        return switchValue;
     }
 
     private string GetBitArrayDataForLog(BitArray bitArray)

@@ -14,11 +14,10 @@ public class Reader
     private byte[] _timeSyncBuffer = new byte[8];
     private byte[] _frameDataBuffer = new byte[5];
 
-    public static async Task<Reader> Open(Stream stream, ILogger logger)
+    public static async Task<Reader?> Open(Stream stream, ILogger logger)
     {
         var reader = new Reader(stream, logger);
-        await reader.Initialise();
-        return reader;
+        return await reader.Initialise() ? reader : null;
     }
 
     private Reader(Stream stream, ILogger logger)
@@ -31,18 +30,19 @@ public class Reader
     private const string v1Header = "CANSERVER_v2_CANSERVER";
     private const string v2Header = "CANSERVER_v3_CANSERVER";
 
-    private async Task Initialise()
+    private async Task<bool> Initialise()
     {
         _stream.Seek(0, SeekOrigin.Begin);
         // Validate Header
         var header = new byte[HeaderSize];
         if (await _stream.ReadAsync(header) != HeaderSize)
-            throw new Exception("Invalid Header");
+            return false;
         var logVersion = LogVersionFromBuffer(header);
         // Log version required at start
         if (logVersion == 0)
-            throw new Exception("Invalid Header");
+            return false;
         _logVersion = logVersion;
+        return true;
     }
 
     private uint LogVersionFromBuffer(byte[] header)
@@ -105,7 +105,8 @@ public class Reader
             else if ((start & 0b11110000) == 0xB0)
             {
                 var frameData = new byte[5];
-                _stream.ReadExactly(frameData, 0, 5);
+                var headerRead = _stream.Read(frameData, 0, 5);
+                if (headerRead != 5) return null;
 
                 var frameTimeOffset = (start & 0x0F) + (frameData[0] << 4) + (frameData[1] << 12) +
                                       (((frameData[2] & 0xF8) >> 3) << 20);
@@ -136,6 +137,7 @@ public class Reader
             {
                 _logger.LogDebug("Skipping frame {byte:x8}", start & 0b11110000);
             }
+
             var nextStart = _stream.ReadByte();
             if (nextStart == -1)
                 return null;
