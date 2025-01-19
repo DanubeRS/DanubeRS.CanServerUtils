@@ -44,12 +44,11 @@ var db = await BootstrapDatabase(["~/Model3CAN.dbc"]);
 
 void DecodeFrame(int busId, int frameId, byte[] frameData)
 {
-    if (db.TryParseBinaryMessage(frameId, frameData, out var value, out var defn))
+    if (!db.TryParseBinaryMessage(frameId, frameData, out var value, out var defn)) return;
+    
+    foreach (var signal in defn.Signals.Where(s => s.Name == "VCRIGHT_wattsDemandEvap"))
     {
-        foreach (var signal in defn.Signals)
-        {
-            logger.LogInformation("{Name} {Value} {Unit}", signal.Name, value.Signals.Single(s => s.SignalName ==signal.Name).Value, signal.Unit);
-        }
+        logger.LogInformation("{Name} {Value} {Unit}", signal.Name, value.Signals.Single(s => s.SignalName ==signal.Name).Value, signal.Unit);
     }
 }
 
