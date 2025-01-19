@@ -94,16 +94,16 @@ parserResult.MapResult(
 
 async Task<Database> BootstrapDatabase(ILoggerFactory loggerFactory, IParseOptions parseOptions)
 {
-    var database1 = new Database(loggerFactory.CreateLogger<Database>());
+    var database = new Database(loggerFactory.CreateLogger<Database>());
     foreach (var dbc in parseOptions.Databases)
     {
         await using var dbcStream = File.OpenRead(dbc.Replace("~",
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)));
         using var dbcReader = new StreamReader(dbcStream);
-        database1.AddFile(dbcReader);
+        database.AddFile(dbcReader);
     }
 
-    return database1;
+    return database;
 }
 
 async Task ParseFileInternal(FileInfo fileInfo,

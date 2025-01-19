@@ -6,6 +6,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DanubeRS.CanServerUtils.Lib
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DanubeRS.CanServerUtils.Tests", "DanubeRS.CanServerUtils.Tests\DanubeRS.CanServerUtils.Tests.csproj", "{EE503C19-D754-4271-92BC-243157B30C4F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DanubeRS.CANServerUtils.Pandas", "DanubeRS.CANServerUtils.Pandas\DanubeRS.CANServerUtils.Pandas.csproj", "{9DF44B2F-DF17-4AA2-9CF9-EBD4856C5E4E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -24,5 +26,9 @@ Global
 		{EE503C19-D754-4271-92BC-243157B30C4F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EE503C19-D754-4271-92BC-243157B30C4F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EE503C19-D754-4271-92BC-243157B30C4F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9DF44B2F-DF17-4AA2-9CF9-EBD4856C5E4E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9DF44B2F-DF17-4AA2-9CF9-EBD4856C5E4E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9DF44B2F-DF17-4AA2-9CF9-EBD4856C5E4E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9DF44B2F-DF17-4AA2-9CF9-EBD4856C5E4E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
