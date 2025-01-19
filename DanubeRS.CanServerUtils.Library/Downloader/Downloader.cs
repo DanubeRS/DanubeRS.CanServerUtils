@@ -1,7 +1,10 @@
 using System.Diagnostics;
+using System.Net;
 using DanubeRS.CanServerUtils.Lib.LogFileClient;
 using Humanizer;
 using Microsoft.Extensions.Logging;
+using Polly;
+using Polly.Retry;
 
 namespace DanubeRS.CanServerUtils.Lib.Downloader;
 
@@ -15,10 +18,11 @@ public class Downloader(string url, ILogger<Downloader> logger)
     }
 
     public async Task DownloadAllFiles(LogFileType type, bool deleteOnDownload = false, bool implicitLogDisable = false,
-        string? outputPath = null)
+        string? outputPath = null, CancellationToken cancellationToken = default,
+        Action<string>? onFileDownloaded = null)
     {
         using var client = CreateClient();
-        var isAlive = await client.GetIsAlive();
+        var isAlive = await client.GetIsAlive(cancellationToken);
         if (!isAlive)
         {
             logger.LogInformation("Client is not alive. Returning");
@@ -41,7 +45,7 @@ public class Downloader(string url, ILogger<Downloader> logger)
                 throw new DownloaderException("Logging is not disabled before download");
             }
 
-            await DownloadAllFilesInternal(client, deleteOnDownload, outputPath);
+            await DownloadAllFilesInternal(client, deleteOnDownload, outputPath, cancellationToken, onFileDownloaded);
         }
         finally
         {
@@ -61,7 +65,7 @@ public class Downloader(string url, ILogger<Downloader> logger)
     }
 
     private async Task DownloadAllFilesInternal(LogFileClient.LogFileClient client, bool deleteOnDownload,
-        string? outputPath, CancellationToken cancellationToken = default)
+        string? outputPath, CancellationToken cancellationToken = default, Action<string>? onDownloaded = null)
     {
         var allFiles = new List<LogFileRecord>();
         var downloadDate = DateTimeOffset.UtcNow;
@@ -88,16 +92,96 @@ public class Downloader(string url, ILogger<Downloader> logger)
 
         foreach (var file in allFiles.OrderBy(f => f.Name))
         {
-            logger.LogInformation("Downloading file {File}", file.Name);
+            var notFoundRetry = new RetryStrategyOptions<string?>()
+            {
+                ShouldHandle =
+                    new PredicateBuilder<string?>().Handle<HttpRequestException>(exception =>
+                        exception.StatusCode == HttpStatusCode.NotFound),
+                BackoffType = DelayBackoffType.Constant,
+                Delay = TimeSpan.FromSeconds(10),
+                OnRetry = async args =>
+                {
+                    logger.LogWarning("Server was unable to find the file, suggesting that it needs to be restarted");
+                    logger.LogInformation("Restarting server. Attempt {Attempt}", args.AttemptNumber);
+                    await client.ResetServer(args.Context.CancellationToken);
+                    var isAliveLoop = new RetryStrategyOptions<bool>()
+                    {
+                        Delay = TimeSpan.FromSeconds(1),
+                        BackoffType = DelayBackoffType.Exponential,
+                        ShouldHandle = arguments => ValueTask.FromResult(!arguments.Outcome.Result),
+                    };
+                    await new ResiliencePipelineBuilder<bool>().AddRetry(isAliveLoop).Build().ExecuteAsync(
+                        async (clientState, token) => await clientState.GetIsAlive(token),
+                        client,
+                        args.Context.CancellationToken).ConfigureAwait(false);
+                    logger.LogInformation("Server successfully restarted. Downloading file again");
+                },
+                MaxRetryAttempts = 3,
+            };
 
-            await using var ms =
-                new FileStream(Path.Combine(outputDir.FullName, $"{downloadDate:yyyyddMHHmmss}_{file.Name}"),
-                    FileMode.CreateNew);
-            sw.Restart();
-            await client.GetLogFileData(file, ms, cancellationToken);
-            var time = sw.Elapsed;
-            logger.LogInformation("Downloaded {Bytes} in {Seconds}s ({Rate}/s)", file.Size.Bytes().Humanize(),
-                time.TotalSeconds, (file.Size / time.TotalSeconds).Bytes().Humanize("000.00"));
+            var badFileSizeRetry = new RetryStrategyOptions<string?>()
+            {
+                ShouldHandle = new PredicateBuilder<string?>().HandleResult(s => s == null),
+                BackoffType = DelayBackoffType.Constant,
+                Delay = TimeSpan.Zero,
+                MaxRetryAttempts = 3,
+                OnRetry = ctx =>
+                {
+                    logger.LogWarning("Returned file was not the expected size. Retrying (attempt {Attempts})...",
+                        ctx.AttemptNumber);
+                    return ValueTask.CompletedTask;
+                },
+            };
+
+            try
+            {
+                var archiveFile = await new ResiliencePipelineBuilder<string?>().AddRetry(notFoundRetry)
+                    .AddRetry(badFileSizeRetry).Build().ExecuteAsync(async (clientState, token) =>
+                    {
+                        logger.LogInformation("Downloading file {File}", file.Name);
+                        var archiveFile = Path.Combine(outputDir.FullName, $"{downloadDate:yyyyddMHHmmss}_{file.Name}");
+                        await using var ms = new MemoryStream();
+                        sw.Restart();
+                        await clientState.GetLogFileData(file, ms, token);
+                        var time = sw.Elapsed;
+                        logger.LogInformation("Downloaded {Bytes} in {Seconds}s ({Rate}/s)",
+                            file.Size.Bytes().Humanize(),
+                            time.TotalSeconds, (file.Size / time.TotalSeconds).Bytes().Humanize("000.00"));
+                        // The file length does not match what we expected
+                        if (file.Size != ms.Length) return null;
+                        ms.Seek(0, SeekOrigin.Begin);
+                        // File successfully read to mem, now write to file on disk!
+                        await using var fs =
+                            new FileStream(archiveFile,
+                                FileMode.CreateNew);
+                        await ms.CopyToAsync(fs, token);
+                        return archiveFile;
+                    }, client, cancellationToken);
+
+                if (archiveFile == null)
+                    throw new Exception("Unable to download file. Returned file was not the expected size");
+
+
+                onDownloaded?.Invoke(archiveFile);
+                if (deleteOnDownload)
+                {
+                    try
+                    {
+                        logger.LogInformation("Deleting source file {file}", file.Name);
+                        await client.DeleteFile(file);
+                    }
+                    catch (Exception e)
+                    {
+                        logger.LogError(e, "Failed to delete log file");
+                        continue;
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                logger.LogError(e, "Failed to download log file");
+                continue;
+            }
         }
     }
 

@@ -48,11 +48,11 @@ public class LogFileClient : IDisposable
 
     public async Task GetLogFileData(LogFileRecord record, Stream target, CancellationToken cancellationToken)
     {
-        var logFiles = await _client.GetStreamAsync("/logs/files/download?id=" + record.Name);
+        var logFiles = await _client.GetStreamAsync("/logs/files/download?id=" + record.Name, cancellationToken);
         await logFiles.CopyToAsync(target, cancellationToken);
     }
 
-    public async Task<bool> GetIsAlive()
+    public async Task<bool> GetIsAlive(CancellationToken cancellationToken)
     {
         var response = await _client.GetAsync("/stats");
         return response.IsSuccessStatusCode;
@@ -61,6 +61,17 @@ public class LogFileClient : IDisposable
     public void Dispose()
     {
         _client.Dispose();
+    }
+
+    public async Task DeleteFile(LogFileRecord file)
+    {
+        await _client.PostAsync($"/logs/files/delete",
+            new FormUrlEncodedContent(new[] { new KeyValuePair<string, string>("id", file.Name) }));
+    }
+
+    public async Task ResetServer(CancellationToken cancellationToken)
+    {
+        await _client.GetAsync("/restart", cancellationToken);
     }
 }
 

@@ -39,7 +39,8 @@ public class Database(ILogger<Database> logger)
         }
     }
 
-    public bool TryParseBinaryMessage(int frameId, byte[] data, [NotNullWhen(true)] out MessageValue? value, [NotNullWhen(true)] out MessageDefinition? defn)
+    public bool TryParseBinaryMessage(int frameId, byte[] data, [NotNullWhen(true)] out MessageValue? value,
+        [NotNullWhen(true)] out MessageDefinition? defn)
     {
         value = null;
         if (!_messageDefn.TryGetValue(frameId, out defn))
@@ -75,10 +76,28 @@ public class Database(ILogger<Database> logger)
         Array.Clear(_signalValueBytes);
         BitsToBytes(data, signal.StartBit, signal.Size, _signalValueBytes);
         var rawValue = signal.ValueType == ValueType.Unsigned
-            ? BitConverter.ToUInt64(_signalValueBytes, 0)
-            : (double)BitConverter.ToInt64(_signalValueBytes, 0);
+            ? (long)BitConverter.ToUInt64(_signalValueBytes, 0)
+            : BitConverter.ToInt64(_signalValueBytes, 0);
+        if (signal.ValueType == ValueType.Signed)
+        {
+            rawValue = rawValue >> (signal.Size - 1) == 0 ? rawValue : -1 ^ CreateBitMask(0, signal.Size) | rawValue;
+        }
+
+        if (signal.Name == "RearPower266" && rawValue != 0)
+        {
+            logger.LogDebug("break");
+        }
+
         var signalValue = new SignalValue(signal.Name, signal.Offset + rawValue * signal.Factor);
         return signalValue;
+    }
+
+    private static long CreateBitMask(int start, int length)
+    {
+        ulong mask = 0xffffffffffffffff;
+        mask >>= 64 - length;
+        mask <<= start;
+        return (long)mask;
     }
 
     private void BitsToBytes(BitArray bitArray, int offset, int length, byte[] bytes)
@@ -88,8 +107,11 @@ public class Database(ILogger<Database> logger)
 
         for (var i = 0; i < length; i++)
         {
-            if (bitArray[offset + i])
-                bytes[byteIdx] |= (byte)(1 << bitIdx);
+            if (i < length)
+            {
+                if (bitArray[offset + i])
+                    bytes[byteIdx] |= (byte)(1 << bitIdx);
+            }
 
             bitIdx++;
             if (bitIdx != 8) continue;

@@ -83,7 +83,7 @@ public static class DbcParser
         .Select(s => s.ToStringValue() == "+" ? Parser.ValueType.Unsigned : Parser.ValueType.Signed);
 
     private static TokenListParser<DbcTokens, Endianness> Endianness { get; } =
-        Boolean.Select(b => b ? Parser.Endianness.Big : Parser.Endianness.Little);
+        Boolean.Select(b => b ? Parser.Endianness.Little : Parser.Endianness.Big);
 
     private static TokenListParser<DbcTokens, string> QuotedString { get; } =
         Token.EqualTo(DbcTokens.String)
