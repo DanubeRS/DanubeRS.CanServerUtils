@@ -52,7 +52,7 @@ void DecodeFrame(int busId, int frameId, byte[] frameData)
     }
 }
 
-async Task RecieveLoop()
+async Task ReceiveLoop()
 {
     while (true)
     {
@@ -73,7 +73,7 @@ async Task RecieveLoop()
 }
 
 var heartbeatTask = Task.Factory.StartNew(HeartbeatLoop);
-var receiveTask = await Task.Factory.StartNew(RecieveLoop);
+var receiveTask = await Task.Factory.StartNew(ReceiveLoop);
 await client.SendAsync(new byte[] { 0x0F, 0x01, 0x02, 0x0C });
 await heartbeatTask;
 await receiveTask;
