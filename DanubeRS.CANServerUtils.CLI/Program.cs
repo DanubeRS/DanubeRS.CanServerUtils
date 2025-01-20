@@ -24,7 +24,8 @@ var loggerFactory = LoggerFactory.Create(b =>
 var logger = loggerFactory.CreateLogger<Program>();
 
 var influxClient = new InfluxDBClient("https://influx.internal.danubers.com",
-    "I8lVgPbbFa820lZfliPYRJEgCR6FGBqSU_2Avx0_2xKV0UnzRpq9KWaybWDImBNlbnv1tUFus0rbmN1IA2NzMA==");
+    "AIiYRM3WGnIq6_fERvrqT_Pydm0hB21kePpgJHmEtCn0HV3AyoX0Au3EBfONGMUs86ym4mpztjZV9pDa7j_2oA==");
+influxClient.EnableGzip();
 var influxWriteClient = influxClient.GetWriteApiAsync();
 
 var parserResult = Parser.Default.ParseArguments<DownloadOptions, ParseOptions, DownloadAndParseOptions>(args);
@@ -111,7 +112,7 @@ async Task ParseFileInternal(FileInfo fileInfo,
 {
     var stopWatch = new Stopwatch();
     var pointData = new List<PointData>();
-    logger.LogDebug("Reading file {LogFileName}", fileInfo.FullName);
+    logger.LogInformation("Reading file {LogFileName}", fileInfo.FullName);
     await using var fs = fileInfo.OpenRead();
     var reader = await Reader.Open(fs, loggerFactory.CreateLogger<Reader>());
     if (reader == null)
@@ -120,8 +121,10 @@ async Task ParseFileInternal(FileInfo fileInfo,
         return;
     }
 
-    var frames = 0;
+    var frames = 0L;
+    var points = 0L;
     stopWatch.Restart();
+    var initialFrameTimeLogged = false;
     while (true)
     {
         var frame = reader.GetNextFrame();
@@ -138,10 +141,11 @@ async Task ParseFileInternal(FileInfo fileInfo,
             pointData.AddRange(value.Signals
                 .Select(signal => new { signal, signalDfn = defn.Signals.First(s => s.Name == signal.SignalName) })
                 .Select(@t => PointData.Measurement("CAN")
-                    .Tag("_unit", @t.signalDfn.Unit)
-                    .Field(@t.signalDfn.Name, @t.signal.Value)
+                    .Tag("_unit", t.signalDfn.Unit.TrimStart('"').TrimEnd('"'))
+                    .Field(t.signal.SignalName, t.signal.Value)
                     .Tag("bus", frame.BusId.ToString())
-                    .Field("frame_id", frame.FrameId)
+                    .Tag("frame_id", defn.Header.Id.ToString())
+                    .Tag("frame_name", defn.Header.Name)
                     .Timestamp((long)frame.FrameTime / 1000, WritePrecision.Ms)));
         }
 
@@ -150,14 +154,15 @@ async Task ParseFileInternal(FileInfo fileInfo,
             await writeApiAsync.WritePointsAsync(pointData, "tesla", "danubers");
             logger.LogDebug("Processed {points} points ({pointsSec}/sec)", pointData.Count,
                 (pointData.Count / stopWatch.Elapsed.TotalSeconds));
+            points += pointData.Count;
             pointData.Clear();
         }
 
-        var initialFrameTimeLogged = false;
-        if (initialFrameTimeLogged)
+        if (!initialFrameTimeLogged)
         {
             logger.LogInformation("First file frame time {Timestamp:s}",
                 DateTime.UnixEpoch.AddMicroseconds(frame.FrameTime));
+            initialFrameTimeLogged = true;
         }
 
         frames++;
@@ -176,5 +181,8 @@ async Task ParseFileInternal(FileInfo fileInfo,
 
     stopWatch.Stop();
     logger.LogInformation("Processed {frames} frames from {path} in {elapsed} ({framesSec}/sec)", frames, fileInfo.Name,
-        stopWatch.Elapsed.TotalSeconds, (frames / stopWatch.Elapsed.TotalSeconds));
+        stopWatch.Elapsed.TotalSeconds, frames / stopWatch.Elapsed.TotalSeconds);
+    logger.LogDebug("Processed {points} points ({pointsSec}/sec)", points,
+        (points / stopWatch.Elapsed.TotalSeconds));
+    
 }
