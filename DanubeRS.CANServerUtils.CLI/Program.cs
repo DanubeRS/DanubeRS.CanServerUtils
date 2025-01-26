@@ -25,7 +25,9 @@ var logger = loggerFactory.CreateLogger<Program>();
 
 var influxClient = new InfluxDBClient("https://influx.internal.danubers.com",
     "AIiYRM3WGnIq6_fERvrqT_Pydm0hB21kePpgJHmEtCn0HV3AyoX0Au3EBfONGMUs86ym4mpztjZV9pDa7j_2oA==");
-influxClient.EnableGzip();
+influxClient.DisableGzip();
+const string org = "danubers";
+const string bucket = "tesla";
 var influxWriteClient = influxClient.GetWriteApiAsync();
 
 var parserResult = Parser.Default.ParseArguments<DownloadOptions, ParseOptions, DownloadAndParseOptions>(args);
@@ -69,18 +71,30 @@ async Task<int> DownloadInternal(IDownloadOptions downloadOptions, Action<string
 
 async Task<int> Parse(ParseOptions options)
 {
-    var database = await BootstrapDatabase(loggerFactory, options);
-
-    var inputPath = options.InputPath;
-    var inputDir = inputPath == null
-        ? new DirectoryInfo(Directory.GetCurrentDirectory())
-        : new DirectoryInfo(inputPath.Replace("~",
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)));
-    var files = inputDir.EnumerateFiles("*.log").OrderBy(f => f.Name);
-
-    foreach (var file in files)
+    while (true)
     {
-        await ParseFileInternal(file, database, influxWriteClient);
+        var database = await BootstrapDatabase(loggerFactory, options);
+        var archiveDirectory = options.ArchivePath?.Replace("~",
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+
+        var inputPath = options.InputPath;
+        var inputDir = inputPath == null
+            ? new DirectoryInfo(Directory.GetCurrentDirectory())
+            : new DirectoryInfo(inputPath.Replace("~",
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)));
+        var files = inputDir.EnumerateFiles("*.log").OrderBy(f => f.Name);
+
+        foreach (var file in files)
+        {
+            await ParseFileInternal(file, database, influxWriteClient);
+            if (archiveDirectory != null)
+                file.MoveTo(Path.Combine(archiveDirectory, Path.Combine(archiveDirectory, file.Name)));
+        }
+
+        if (options.Watch <= 0) return 0;
+
+        logger.LogInformation("Parsing is watching, delay {Seconds} before next loop...", options.Watch);
+        await Task.Delay(TimeSpan.FromSeconds(options.Watch));
     }
 
     return 0;
@@ -125,6 +139,7 @@ async Task ParseFileInternal(FileInfo fileInfo,
     var points = 0L;
     stopWatch.Restart();
     var initialFrameTimeLogged = false;
+    var pointsStopwatch = Stopwatch.StartNew();
     while (true)
     {
         var frame = reader.GetNextFrame();
@@ -133,6 +148,8 @@ async Task ParseFileInternal(FileInfo fileInfo,
         logger.LogDebug("Decoding frame {FrameId:x8} @ {FrameTime}", frame.FrameId, frame.FrameTime);
         if (database.TryParseBinaryMessage(frame.FrameId, frame.FramePayload, out var value, out var defn))
         {
+            // if (frame.FrameId != 79) continue;
+
             logger.LogDebug("Successfully Parsed message #{MessageNumber} @ {MessageTime} (ID:{FrameId})", frames,
                 frame.FrameTime, frame.FrameId);
             logger.LogTrace("{MessageId} {MessageName} {Signals}", value.MessageId, value.MessageName,
@@ -140,7 +157,7 @@ async Task ParseFileInternal(FileInfo fileInfo,
 
             pointData.AddRange(value.Signals
                 .Select(signal => new { signal, signalDfn = defn.Signals.First(s => s.Name == signal.SignalName) })
-                .Select(@t => PointData.Measurement("CAN")
+                .Select(t => PointData.Measurement("CAN")
                     .Tag("_unit", t.signalDfn.Unit.TrimStart('"').TrimEnd('"'))
                     .Field(t.signal.SignalName, t.signal.Value)
                     .Tag("bus", frame.BusId.ToString())
@@ -149,13 +166,16 @@ async Task ParseFileInternal(FileInfo fileInfo,
                     .Timestamp((long)frame.FrameTime / 1000, WritePrecision.Ms)));
         }
 
-        if (pointData.Count / 5_000 > 1)
+        if (pointData.Count > 10_000)
         {
-            await writeApiAsync.WritePointsAsync(pointData, "tesla", "danubers");
-            logger.LogDebug("Processed {points} points ({pointsSec}/sec)", pointData.Count,
-                (pointData.Count / stopWatch.Elapsed.TotalSeconds));
+            var rqStop = Stopwatch.StartNew();
+            await writeApiAsync.WritePointsAsync(pointData, bucket, org);
+            rqStop.Stop();
+            logger.LogDebug("Processed {points} points ({pointsSec}/sec) (RQ: {RequestSec})", pointData.Count,
+                (pointData.Count / pointsStopwatch.Elapsed.TotalSeconds), rqStop.Elapsed.TotalSeconds);
+            pointsStopwatch.Restart();
             points += pointData.Count;
-            pointData.Clear();
+            pointData = new List<PointData>();
         }
 
         if (!initialFrameTimeLogged)
@@ -175,14 +195,15 @@ async Task ParseFileInternal(FileInfo fileInfo,
         }
     }
 
+    points += pointData.Count;
     await writeApiAsync.WritePointsAsync(pointData, "tesla", "danubers");
-    logger.LogDebug("Processed {points} points ({pointsSec}/sec)", pointData.Count,
-        (pointData.Count / stopWatch.Elapsed.TotalSeconds));
+    logger.LogDebug("Processed {points} points ({pointsSec}/sec)", points,
+        (points / stopWatch.Elapsed.TotalSeconds));
 
     stopWatch.Stop();
     logger.LogInformation("Processed {frames} frames from {path} in {elapsed} ({framesSec}/sec)", frames, fileInfo.Name,
         stopWatch.Elapsed.TotalSeconds, frames / stopWatch.Elapsed.TotalSeconds);
-    logger.LogDebug("Processed {points} points ({pointsSec}/sec)", points,
+    logger.LogInformation("Processed {points} points in {elapsed}({pointsSec}/sec)", points,
+        stopWatch.Elapsed.TotalSeconds,
         (points / stopWatch.Elapsed.TotalSeconds));
-    
 }

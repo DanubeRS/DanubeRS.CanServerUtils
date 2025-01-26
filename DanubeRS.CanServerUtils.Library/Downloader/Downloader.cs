@@ -5,6 +5,7 @@ using Humanizer;
 using Microsoft.Extensions.Logging;
 using Polly;
 using Polly.Retry;
+using Polly.Timeout;
 
 namespace DanubeRS.CanServerUtils.Lib.Downloader;
 
@@ -96,7 +97,8 @@ public class Downloader(string url, ILogger<Downloader> logger)
             {
                 ShouldHandle =
                     new PredicateBuilder<string?>().Handle<HttpRequestException>(exception =>
-                        exception.StatusCode == HttpStatusCode.NotFound),
+                            exception.StatusCode == HttpStatusCode.NotFound)
+                        .Handle<TimeoutRejectedException>(),
                 BackoffType = DelayBackoffType.Constant,
                 Delay = TimeSpan.FromSeconds(10),
                 OnRetry = async args =>
@@ -136,6 +138,7 @@ public class Downloader(string url, ILogger<Downloader> logger)
             try
             {
                 var archiveFile = await new ResiliencePipelineBuilder<string?>().AddRetry(notFoundRetry)
+                    .AddTimeout(TimeSpan.FromMinutes(5))
                     .AddRetry(badFileSizeRetry).Build().ExecuteAsync(async (clientState, token) =>
                     {
                         logger.LogInformation("Downloading file {File}", file.Name);
