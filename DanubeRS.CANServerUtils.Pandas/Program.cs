@@ -1,5 +1,6 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
+using System.Globalization;
 using System.Net.Sockets;
 using System.Text;
 using DanubeRS.CanServerUtils.Lib.DBC;
@@ -14,7 +15,7 @@ var loggerFactory = LoggerFactory.Create(b =>
 
 var logger = loggerFactory.CreateLogger<Program>();
 
-var factory = new PandasClientFactory("192.168.8.243", 1338);
+var factory = new PandasClientFactory("192.168.8.243", 1338, loggerFactory);
 
 async Task<Database> BootstrapDatabase(string[] dbs)
 {
@@ -30,33 +31,28 @@ async Task<Database> BootstrapDatabase(string[] dbs)
     return database;
 }
 
-var db = await BootstrapDatabase(["~/Model3CAN.dbc"]);
+var db = await BootstrapDatabase(["~/CANTEST/Model3CAN.dbc", "~/CANTEST/CANServer.dbc"]);
 
-void DecodeFrame(int busId, int frameId, byte[] frameData)
+void HandleMessages(PandasMessage message)
 {
-    if (!db.TryParseBinaryMessage(frameId, frameData, out var value, out var defn)) return;
-
-    foreach (var signal in defn.Signals.Where(s => s.Name == "VCRIGHT_wattsDemandEvap"))
+    logger.LogInformation("Received {Message} at {timestamp:s}", message.Frames.Length, message.Timestamp);
+    foreach (var frame in message.Frames)
     {
-        logger.LogInformation("{Name} {Value} {Unit}", signal.Name,
-            value.Signals.Single(s => s.SignalName == signal.Name).Value, signal.Unit);
+        logger.LogInformation("Frame {FrameId}", frame.FrameId);
+        if (db.TryParseBinaryMessage(frame.FrameId, frame.FrameData, out var messageValue, out var messageDefinition))
+        {
+            logger.LogInformation("Decoded {MessageName}", messageDefinition.Header.Name);
+            foreach (var signal in messageDefinition.Signals)
+            {
+                var value = messageValue.Signals.Single(s => s.SignalName == signal.Signal.Name).Value;
+                var signalValueName =
+                    signal.ValueLookup?.GetValueOrDefault((uint)value) ?? value.ToString(CultureInfo.InvariantCulture);
+                logger.LogInformation("{Name} - {Value}", signal.Signal.Name, signalValueName);
+            }
+        }
     }
 }
 
-void HandleMessage(PandasMessage message)
-{
-    logger.LogInformation("Received at {timestamp:s}", message.Timestamp);
-    foreach (var frame in message.Frames)
-        if (db.TryParseBinaryMessage(frame.FrameId, frame.FrameData, out var value, out var defn))
-        {
-            logger.LogInformation("Decoded {MessageName}", defn.Header.Name);
-            foreach (var signal in defn.Signals)
-            {
-                logger.LogInformation("{Name} - {Value}", signal.Name, value.Signals.Single(s => s.SignalName == signal.Name).Value);
-            }
-        }
-}
-
-var instance = await factory.CreateAsync(HandleMessage, CancellationToken.None);
-await instance.Track((0x01, [0x01, 0x32]));
+var instance = await factory.CreateAsync(HandleMessages, CancellationToken.None);
+// await instance.Track((0x0F, [0x05, 0x00]), (0x0F, [0x05, 0x02]), (0x01, [0x02, 0x01]));
 await instance.Handle;

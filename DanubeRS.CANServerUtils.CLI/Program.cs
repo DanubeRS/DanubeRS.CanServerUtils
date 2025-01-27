@@ -156,9 +156,9 @@ async Task ParseFileInternal(FileInfo fileInfo,
                 value.Signals.Select(s => $"{s.SignalName}"));
 
             pointData.AddRange(value.Signals
-                .Select(signal => new { signal, signalDfn = defn.Signals.First(s => s.Name == signal.SignalName) })
+                .Select(signal => new { signal, signalDfn = defn.Signals.First(s => s.Signal.Name == signal.SignalName) })
                 .Select(t => PointData.Measurement("CAN")
-                    .Tag("_unit", t.signalDfn.Unit.TrimStart('"').TrimEnd('"'))
+                    .Tag("_unit", t.signalDfn.Signal.Unit.TrimStart('"').TrimEnd('"'))
                     .Field(t.signal.SignalName, t.signal.Value)
                     .Tag("bus", frame.BusId.ToString())
                     .Tag("frame_id", defn.Header.Id.ToString())
@@ -166,7 +166,7 @@ async Task ParseFileInternal(FileInfo fileInfo,
                     .Timestamp((long)frame.FrameTime / 1000, WritePrecision.Ms)));
         }
 
-        if (pointData.Count > 10_000)
+        if (pointData.Count > 5_000)
         {
             var rqStop = Stopwatch.StartNew();
             await writeApiAsync.WritePointsAsync(pointData, bucket, org);

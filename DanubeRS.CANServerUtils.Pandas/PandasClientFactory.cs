@@ -1,6 +1,6 @@
 using System.Net.Sockets;
-using System.Runtime.CompilerServices;
 using System.Text;
+using Microsoft.Extensions.Logging;
 
 namespace DanubeRS.CANServerUtils.Pandas;
 
@@ -8,36 +8,46 @@ public class PandasClientFactory
 {
     private readonly string _url;
     private readonly int _port;
+    private readonly ILoggerFactory _loggerFactory;
+    private readonly ILogger _logger;
 
-    public PandasClientFactory(string url, int port)
+    public PandasClientFactory(string url, int port, ILoggerFactory loggerFactory)
     {
         _url = url;
         _port = port;
+        _loggerFactory = loggerFactory;
+        _logger = _loggerFactory.CreateLogger<PandasClientFactory>();
     }
 
     public async Task<IPandasClientInstance> CreateAsync(Action<PandasMessage> onMessageReceived,
         CancellationToken cancellationToken)
     {
-        var instance = new PandasClientInstance(_url, _port);
-        instance.StartListening(cancellationToken, onMessageReceived);
+        var instance = new PandasClientInstance(_url, _port, _loggerFactory.CreateLogger<PandasClientInstance>());
+        await instance.StartListening(cancellationToken, onMessageReceived);
         return instance;
     }
 
     private class PandasClientInstance : IPandasClientInstance
     {
+        private readonly ILogger _logger;
         private readonly UdpClient _client;
         private Task _heartbeatTask;
         private Task _listenLoop;
+        private readonly TaskCompletionSource<bool> _ackCompletionSource;
 
-        public PandasClientInstance(string address, int port)
+        public PandasClientInstance(string address, int port, ILogger logger)
         {
+            _logger = logger;
             _client = new UdpClient(address, port);
+            _ackCompletionSource = new TaskCompletionSource<bool>();
         }
 
-        public void StartListening(CancellationToken cancellationToken, Action<PandasMessage> onMessageReceived)
+        public async Task StartListening(CancellationToken cancellationToken, Action<PandasMessage> onMessageReceived)
         {
             _heartbeatTask = HeartbeatLoop(cancellationToken);
             _listenLoop = ReceiveLoop(onMessageReceived, cancellationToken);
+            // Don't return until the ACK is completed and true
+            await _ackCompletionSource.Task;
         }
 
         public async Task StopListening()
@@ -52,28 +62,52 @@ public class PandasClientFactory
             {
                 if (cancellationToken.IsCancellationRequested) break;
                 await _client.SendAsync(Encoding.UTF8.GetBytes("ehllo"), cancellationToken);
-                await Task.Delay(1000, cancellationToken);
+                _logger.LogInformation("Heartbeat sent");
+                await Task.Delay(5000, cancellationToken);
             }
         }
 
-        private async Task ReceiveLoop(Action<PandasMessage> onMessageReceived, CancellationToken cancellationToken)
+        private async Task ReceiveLoop(Action<PandasMessage> onMessagesReceived, CancellationToken cancellationToken)
         {
+            var frames = new List<PandasMessageFrame>();
+            var buffer = new byte[4];
             while (true)
             {
+                var offset = 0;
                 cancellationToken.ThrowIfCancellationRequested();
                 var result = await _client.ReceiveAsync(cancellationToken);
-                var buffer = new byte[4];
-                Array.Copy(result.Buffer, buffer, 4);
-                var frameIdInt = BitConverter.ToInt32(buffer);
-                Array.Copy(result.Buffer, 4, buffer, 0, 4);
-                var frameDetailsInt = BitConverter.ToInt32(buffer);
-                var frameId = frameIdInt >> 21;
-                var frameLength = frameDetailsInt & 0x0F;
-                var frameBusId = frameDetailsInt >> 4;
-                var frameData = new byte[8];
-                Array.Copy(result.Buffer, 8, frameData, 0, 8);
-                onMessageReceived(
-                    new PandasMessage(new PandasMessageFrame(frameId, frameLength, frameBusId, frameData)));
+                while (offset < result.Buffer.Length)
+                {
+                    Array.Clear(buffer);
+                    // Get frame
+                    Array.Copy(result.Buffer, buffer, 4);
+                    var frameIdInt = BitConverter.ToInt32(buffer);
+                    var frameId = frameIdInt >> 21;
+                    
+                    // Get frame data
+                    Array.Copy(result.Buffer, 4, buffer, 0, 4);
+                    var frameDetailsInt = BitConverter.ToInt32(buffer);
+                    var frameLength = frameDetailsInt & 0x0F;
+                    var frameBusId = frameDetailsInt >> 4;
+                    
+                    // Build frame
+                    var frameData = new byte[8];
+                    Array.Copy(result.Buffer, 8, frameData, 0, 8);
+                    var pandasMessageFrame = new PandasMessageFrame(frameId, frameLength, frameBusId, frameData);
+                    frames.Add(pandasMessageFrame);
+                    
+                    // If we have an ACK packet, then the client is now ready to accept streamed frames
+                    if (!_ackCompletionSource.Task.IsCompleted && frameId == 6)
+                    {
+                        _logger.LogInformation("ACK received");
+                        _ackCompletionSource.TrySetResult(true);
+                    }
+
+                    offset += 16;
+                }
+
+                onMessagesReceived(new PandasMessage(frames.ToArray()));
+                frames.Clear();
             }
         }
 
@@ -107,20 +141,12 @@ public class PandasMessage(params PandasMessageFrame[] frames)
     public PandasMessageFrame[] Frames { get; } = frames;
 }
 
-public class PandasMessageFrame
+public class PandasMessageFrame(int frameId, int frameLength, int frameBusId, byte[] frameData)
 {
-    public int FrameId { get; }
-    public int FrameLength { get; }
-    public int FrameBusId { get; }
-    public byte[] FrameData { get; }
-
-    public PandasMessageFrame(int frameId, int frameLength, int frameBusId, byte[] frameData)
-    {
-        FrameId = frameId;
-        FrameLength = frameLength;
-        FrameBusId = frameBusId;
-        FrameData = frameData;
-    }
+    public int FrameId { get; } = frameId;
+    public int FrameLength { get; } = frameLength;
+    public int FrameBusId { get; } = frameBusId;
+    public byte[] FrameData { get; } = frameData;
 }
 
 public interface IPandasClientInstance : IDisposable

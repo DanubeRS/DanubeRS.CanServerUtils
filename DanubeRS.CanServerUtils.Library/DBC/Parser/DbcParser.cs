@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
@@ -278,10 +279,10 @@ public static class DbcParser
         from messageId in Integer
         from signalName in Identifier
         from valueDescriptionValues in Integer
-            .Then((i => QuotedString.Select(s => new KeyValuePair<int, string>(i, s)))).Many()
+            .Then((i => QuotedString.Select(s => new KeyValuePair<uint, string>((uint)i, s)))).Many()
         from end in Token.EqualTo(DbcTokens.Semicolon)
         select new ValueDescription(messageId, signalName,
-            valueDescriptionValues.ToDictionary(kvp => kvp.Key, kvp => kvp.Value));
+            valueDescriptionValues.ToDictionary(kvp => kvp.Key, kvp => kvp.Value).ToImmutableDictionary());
 
     public static TokenListParser<DbcTokens, ParsedDb> Database { get; } =
         from version in Version
@@ -304,7 +305,7 @@ public static class DbcParser
             attributeDefinitions, attributeDefaults, attributeValues, valueDescriptions);
 }
 
-public sealed record ValueDescription(int MessageId, string SignalName, Dictionary<int, string> Values);
+public sealed record ValueDescription(int MessageId, string SignalName, IImmutableDictionary<uint, string> Values);
 
 public sealed record EnvironmentObjectValue(string Name, AttributeDefaultValue Value) : AttributeObjectValue(Value);
 

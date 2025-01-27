@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Collections;
+using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using DanubeRS.CanServerUtils.Lib.DBC.Parser;
@@ -11,11 +12,20 @@ namespace DanubeRS.CanServerUtils.Lib.DBC;
 
 public class Database(ILogger<Database> logger)
 {
-    public class MessageDefinition(Message message)
+    public class SignalDefinition(Message message, Signal signal, ParsedDb db)
     {
-        public readonly Signal[] Signals = message.Signals;
+        public Signal Signal { get; } = signal;
+        public string[] Comments { get; } = [];
+
+        public IReadOnlyDictionary<uint, string>? ValueLookup { get; } = db.ValueDescriptions
+            .SingleOrDefault(v => v.MessageId == message.Header.Id && v.SignalName == signal.Name)?.Values;
+    }
+    public class MessageDefinition(Message message, ParsedDb db)
+    {
+        public readonly SignalDefinition[] Signals = message.Signals.Select(s => new SignalDefinition(message, s, db)).ToArray();
         public readonly MessageHeader Header = message.Header;
         public readonly bool IsMultiplexed = message.Signals.Any(s => s.Multiplex is { IsSwitch: true });
+        public readonly string[] Comments = [];
     }
 
     private readonly Dictionary<int, MessageDefinition> _messageDefn = new();
@@ -35,7 +45,7 @@ public class Database(ILogger<Database> logger)
     {
         foreach (var message in parsed.Messages)
         {
-            _messageDefn.TryAdd(message.Header.Id, new MessageDefinition(message));
+            _messageDefn.TryAdd(message.Header.Id, new MessageDefinition(message, parsed));
         }
     }
 
@@ -62,33 +72,29 @@ public class Database(ILogger<Database> logger)
     private bool TryParseRegularMessage(MessageDefinition defn, BitArray data, out MessageValue? value)
     {
         value = null;
-        var lastSignal = defn.Signals.OrderByDescending(s => s.StartBit).First();
+        if (defn.Signals.Length == 0) return true;
+        var lastSignal = defn.Signals.OrderByDescending(s => s.Signal.StartBit).First();
         // Message size is incompatable
-        if (lastSignal.StartBit + lastSignal.Size > data.Length) return false;
+        if (lastSignal.Signal.StartBit + lastSignal.Signal.Size > data.Length) return false;
 
         value = new MessageValue(defn.Header.Id, defn.Header.Name,
-            defn.Signals.OrderBy(s => s.StartBit).Select(signal => GetSignalValue(data, signal)).ToArray(), null);
+            defn.Signals.OrderBy(s => s.Signal.StartBit).Select(signal => GetSignalValue(data, signal)).ToArray(), null);
         return true;
     }
 
-    private SignalValue GetSignalValue(BitArray data, Signal signal)
+    private SignalValue GetSignalValue(BitArray data, SignalDefinition signal)
     {
         Array.Clear(_signalValueBytes);
-        BitsToBytes(data, signal.StartBit, signal.Size, _signalValueBytes);
-        var rawValue = signal.ValueType == ValueType.Unsigned
+        BitsToBytes(data, signal.Signal.StartBit, signal.Signal.Size, _signalValueBytes);
+        var rawValue = signal.Signal.ValueType == ValueType.Unsigned
             ? (long)BitConverter.ToUInt64(_signalValueBytes, 0)
             : BitConverter.ToInt64(_signalValueBytes, 0);
-        if (signal.ValueType == ValueType.Signed)
+        if (signal.Signal.ValueType == ValueType.Signed)
         {
-            rawValue = rawValue >> (signal.Size - 1) == 0 ? rawValue : -1 ^ CreateBitMask(0, signal.Size) | rawValue;
+            rawValue = rawValue >> (signal.Signal.Size - 1) == 0 ? rawValue : -1 ^ CreateBitMask(0, signal.Signal.Size) | rawValue;
         }
 
-        if (signal.Name == "RearPower266" && rawValue != 0)
-        {
-            logger.LogDebug("break");
-        }
-
-        var signalValue = new SignalValue(signal.Name, signal.Offset + rawValue * signal.Factor);
+        var signalValue = new SignalValue(signal.Signal.Name, signal.Signal.Offset + rawValue * signal.Signal.Factor);
         return signalValue;
     }
 
@@ -126,21 +132,22 @@ public class Database(ILogger<Database> logger)
         var bitArray = new BitArray(data);
 
 
-        var multiplexSignal = defn.Signals.Single(s => s.Multiplex is { IsSwitch: true });
+        var multiplexSignal = defn.Signals.Single(s => s.Signal.Multiplex is { IsSwitch: true });
 
         var switchBytes = new byte[2];
-        BitsToBytes(data, multiplexSignal.StartBit, multiplexSignal.Size, switchBytes);
+        BitsToBytes(data, multiplexSignal.Signal.StartBit, multiplexSignal.Signal.Size, switchBytes);
         var switchValue = BitConverter.ToUInt16(switchBytes);
-        var filteredSignals = defn.Signals.Where(s => s.Multiplex != null && s.Multiplex.SwitchValue == switchValue)
+        var filteredSignals = defn.Signals.Where(s => s.Signal.Multiplex != null && s.Signal.Multiplex.SwitchValue == switchValue)
             .ToArray();
 
-        var lastSignal = filteredSignals.OrderByDescending(s => s.StartBit).FirstOrDefault();
+        var lastSignal = filteredSignals.OrderByDescending(s => s.Signal.StartBit).FirstOrDefault();
         if (lastSignal == null) return false;
-        // Message size is incompatable
-        if (lastSignal.StartBit + lastSignal.Size > data.Length) return false;
+        
+        // Message size is incompatible
+        if (lastSignal.Signal.StartBit + lastSignal.Signal.Size > data.Length) return false;
 
         value = new MessageValue(defn.Header.Id, defn.Header.Name,
-            filteredSignals.Select(signal => GetSignalValue(data, signal)).ToArray(), (uint?)switchValue);
+            filteredSignals.Select(signal => GetSignalValue(data, signal)).ToArray(), switchValue);
 
         return true;
     }
