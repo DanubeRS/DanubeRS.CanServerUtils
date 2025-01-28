@@ -31,8 +31,8 @@ public class PandasClientFactory
     {
         private readonly ILogger _logger;
         private readonly UdpClient _client;
-        private Task _heartbeatTask;
-        private Task _listenLoop;
+        private Task _heartbeatTask = Task.CompletedTask;
+        private Task _listenLoop = Task.CompletedTask;
         private readonly TaskCompletionSource<bool> _ackCompletionSource;
 
         public PandasClientInstance(string address, int port, ILogger logger)
@@ -58,9 +58,8 @@ public class PandasClientFactory
 
         private async Task HeartbeatLoop(CancellationToken cancellationToken)
         {
-            while (true)
+            while (!cancellationToken.IsCancellationRequested)
             {
-                if (cancellationToken.IsCancellationRequested) break;
                 await _client.SendAsync(Encoding.UTF8.GetBytes("ehllo"), cancellationToken);
                 _logger.LogDebug("Heartbeat sent");
                 await Task.Delay(5000, cancellationToken);
@@ -71,10 +70,9 @@ public class PandasClientFactory
         {
             var frames = new List<PandasMessageFrame>();
             var buffer = new byte[4];
-            while (true)
+            while (!cancellationToken.IsCancellationRequested)
             {
                 var offset = 0;
-                cancellationToken.ThrowIfCancellationRequested();
                 var result = await _client.ReceiveAsync(cancellationToken);
                 _logger.Log(LogLevel.Trace, "Result: {Bytes}", BytesToString(result.Buffer));
                 while (offset < result.Buffer.Length)
