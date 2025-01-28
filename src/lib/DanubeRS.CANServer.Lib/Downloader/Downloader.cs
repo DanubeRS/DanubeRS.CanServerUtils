@@ -1,21 +1,26 @@
 using System.Diagnostics;
 using System.Net;
-using DanubeRS.CanServerUtils.Lib.LogFileClient;
+using DanubeRS.CANServer.Downloader.Downloader.Client;
 using Humanizer;
 using Microsoft.Extensions.Logging;
 using Polly;
 using Polly.Retry;
 using Polly.Timeout;
 
-namespace DanubeRS.CanServerUtils.Lib.Downloader;
+namespace DanubeRS.CANServer.Downloader.Downloader;
 
+/// <summary>
+/// Downloader facade for listing, iterating, downloading, and optionally deleting files from a CANServer SD Card
+/// </summary>
+/// <param name="url"></param>
+/// <param name="logger"></param>
 public class Downloader(string url, ILogger<Downloader> logger)
 {
-    private LogFileClient.LogFileClient CreateClient()
+    private LogFileClient CreateClient()
     {
         var httpClient = new HttpClient();
         httpClient.BaseAddress = new Uri(url);
-        return new LogFileClient.LogFileClient(httpClient);
+        return new LogFileClient(httpClient);
     }
 
     public async Task DownloadAllFiles(LogFileType type, bool deleteOnDownload = false, bool implicitLogDisable = false,
@@ -26,7 +31,7 @@ public class Downloader(string url, ILogger<Downloader> logger)
         var isAlive = await client.GetIsAlive(cancellationToken);
         if (!isAlive)
         {
-            logger.LogInformation("Client is not alive. Returning");
+            logger.LogWarning("Client is not alive. Returning");
             return;
         }
 
@@ -35,7 +40,7 @@ public class Downloader(string url, ILogger<Downloader> logger)
         {
             if (logStatus.Mode == LoggingMode.Disabled)
             {
-                logger.LogInformation("Logger is already disabled. Continuing...");
+                logger.LogDebug("Logger is already disabled. Continuing...");
             }
             else if (logStatus.Mode != LoggingMode.Disabled && implicitLogDisable)
             {
@@ -52,7 +57,7 @@ public class Downloader(string url, ILogger<Downloader> logger)
         {
             if (logStatus.Mode != LoggingMode.Disabled)
             {
-                logger.LogInformation("Logging was implicitly disabled. Re-enabling");
+                logger.LogDebug("Logging was implicitly disabled. Re-enabling");
                 try
                 {
                     await client.SetLoggingMode(logStatus.Mode, logStatus.Interval, logStatus.FilterInterval);
@@ -65,7 +70,7 @@ public class Downloader(string url, ILogger<Downloader> logger)
         }
     }
 
-    private async Task DownloadAllFilesInternal(LogFileClient.LogFileClient client, bool deleteOnDownload,
+    private async Task DownloadAllFilesInternal(LogFileClient client, bool deleteOnDownload,
         string? outputPath, CancellationToken cancellationToken = default, Action<string>? onDownloaded = null)
     {
         var allFiles = new List<LogFileRecord>();
@@ -129,7 +134,7 @@ public class Downloader(string url, ILogger<Downloader> logger)
                 MaxRetryAttempts = 3,
                 OnRetry = ctx =>
                 {
-                    logger.LogWarning("Returned file was not the expected size. Retrying (attempt {Attempts})...",
+                    logger.LogWarning("Returned file was not the expected size. Downloading again (attempt {Attempts})...",
                         ctx.AttemptNumber);
                     return ValueTask.CompletedTask;
                 },
@@ -147,7 +152,8 @@ public class Downloader(string url, ILogger<Downloader> logger)
                         sw.Restart();
                         await clientState.GetLogFileData(file, ms, token);
                         var time = sw.Elapsed;
-                        logger.LogInformation("Downloaded {Bytes} in {Seconds}s ({Rate}/s)",
+                        logger.LogDebug("Downloaded {File} ({Bytes}) in {Seconds}s ({Rate}/s)",
+                            file.Name,
                             file.Size.Bytes().Humanize(),
                             time.TotalSeconds, (file.Size / time.TotalSeconds).Bytes().Humanize("000.00"));
                         // The file length does not match what we expected

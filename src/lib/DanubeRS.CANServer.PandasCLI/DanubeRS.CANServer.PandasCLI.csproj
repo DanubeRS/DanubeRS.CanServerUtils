@@ -5,10 +5,12 @@
         <TargetFramework>net9.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <RootNamespace>DanubeRS.CANServerUtils.Pandas</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\DanubeRS.CanServerUtils.Library\DanubeRS.CanServerUtils.Library.csproj"/>
+        <ProjectReference Include="..\DanubeRS.CANServer.Lib\DanubeRS.CANServer.Lib.csproj"/>
+        <ProjectReference Include="..\DanubeRS.DBCParser\DanubeRS.DBCParser.csproj"/>
     </ItemGroup>
 
     <ItemGroup>

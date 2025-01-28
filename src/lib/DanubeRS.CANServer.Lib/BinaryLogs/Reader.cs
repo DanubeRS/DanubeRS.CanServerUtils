@@ -1,7 +1,7 @@
 using System.Text;
 using Microsoft.Extensions.Logging;
 
-namespace DanubeRS.CanServerUtils.Lib.BinaryLogs;
+namespace DanubeRS.CANServer.Downloader.BinaryLogs;
 
 public class Reader
 {

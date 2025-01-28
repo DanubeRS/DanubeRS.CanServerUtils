@@ -3,7 +3,7 @@ using Superpower.Model;
 using Superpower.Parsers;
 using Superpower.Tokenizers;
 
-namespace DanubeRS.CanServerUtils.Lib.DBC.Tokenizer;
+namespace DanubeRS.CanServerUtils.Lib.Tokenizer;
 
 public static class DbcTokenizer
 {

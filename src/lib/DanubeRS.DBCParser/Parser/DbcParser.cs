@@ -1,13 +1,12 @@
 using System.Collections.Immutable;
 using System.Globalization;
-using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
-using DanubeRS.CanServerUtils.Lib.DBC.Tokenizer;
+using DanubeRS.CanServerUtils.Lib.Tokenizer;
 using Superpower;
 using Superpower.Model;
 using Superpower.Parsers;
 
-namespace DanubeRS.CanServerUtils.Lib.DBC.Parser;
+namespace DanubeRS.CanServerUtils.Lib.Parser;
 
 public static class DbcParser
 {

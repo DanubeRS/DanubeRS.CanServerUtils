@@ -20,5 +20,5 @@ public class DecodeTests
         results.Signals.Should().HaveCount(1);
     }
 
-    private Lib.DBC.Database DatabaseInstance => new Lib.DBC.Database(new NullLogger<Lib.DBC.Database>());
+    private Lib.Database DatabaseInstance => new Lib.Database(new NullLogger<Lib.Database>());
 }

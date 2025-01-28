@@ -1,14 +1,12 @@
-using System.Buffers.Binary;
 using System.Collections;
-using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using DanubeRS.CanServerUtils.Lib.DBC.Parser;
-using DanubeRS.CanServerUtils.Lib.DBC.Tokenizer;
+using DanubeRS.CanServerUtils.Lib.Parser;
+using DanubeRS.CanServerUtils.Lib.Tokenizer;
 using Microsoft.Extensions.Logging;
-using ValueType = DanubeRS.CanServerUtils.Lib.DBC.Parser.ValueType;
+using ValueType = DanubeRS.CanServerUtils.Lib.Parser.ValueType;
 
-namespace DanubeRS.CanServerUtils.Lib.DBC;
+namespace DanubeRS.CanServerUtils.Lib;
 
 public class Database(ILogger<Database> logger)
 {
@@ -20,9 +18,12 @@ public class Database(ILogger<Database> logger)
         public IReadOnlyDictionary<uint, string>? ValueLookup { get; } = db.ValueDescriptions
             .SingleOrDefault(v => v.MessageId == message.Header.Id && v.SignalName == signal.Name)?.Values;
     }
+
     public class MessageDefinition(Message message, ParsedDb db)
     {
-        public readonly SignalDefinition[] Signals = message.Signals.Select(s => new SignalDefinition(message, s, db)).ToArray();
+        public readonly SignalDefinition[] Signals =
+            message.Signals.Select(s => new SignalDefinition(message, s, db)).ToArray();
+
         public readonly MessageHeader Header = message.Header;
         public readonly bool IsMultiplexed = message.Signals.Any(s => s.Multiplex is { IsSwitch: true });
         public readonly string[] Comments = [];
@@ -78,7 +79,8 @@ public class Database(ILogger<Database> logger)
         if (lastSignal.Signal.StartBit + lastSignal.Signal.Size > data.Length) return false;
 
         value = new MessageValue(defn.Header.Id, defn.Header.Name,
-            defn.Signals.OrderBy(s => s.Signal.StartBit).Select(signal => GetSignalValue(data, signal)).ToArray(), null);
+            defn.Signals.OrderBy(s => s.Signal.StartBit).Select(signal => GetSignalValue(data, signal)).ToArray(),
+            null);
         return true;
     }
 
@@ -91,7 +93,9 @@ public class Database(ILogger<Database> logger)
             : BitConverter.ToInt64(_signalValueBytes, 0);
         if (signal.Signal.ValueType == ValueType.Signed)
         {
-            rawValue = rawValue >> (signal.Signal.Size - 1) == 0 ? rawValue : -1 ^ CreateBitMask(0, signal.Signal.Size) | rawValue;
+            rawValue = rawValue >> (signal.Signal.Size - 1) == 0
+                ? rawValue
+                : -1 ^ CreateBitMask(0, signal.Signal.Size) | rawValue;
         }
 
         var signalValue = new SignalValue(signal.Signal.Name, signal.Signal.Offset + rawValue * signal.Signal.Factor);
@@ -137,12 +141,13 @@ public class Database(ILogger<Database> logger)
         var switchBytes = new byte[2];
         BitsToBytes(data, multiplexSignal.Signal.StartBit, multiplexSignal.Signal.Size, switchBytes);
         var switchValue = BitConverter.ToUInt16(switchBytes);
-        var filteredSignals = defn.Signals.Where(s => s.Signal.Multiplex != null && s.Signal.Multiplex.SwitchValue == switchValue)
+        var filteredSignals = defn.Signals
+            .Where(s => s.Signal.Multiplex != null && s.Signal.Multiplex.SwitchValue == switchValue)
             .ToArray();
 
         var lastSignal = filteredSignals.OrderByDescending(s => s.Signal.StartBit).FirstOrDefault();
         if (lastSignal == null) return false;
-        
+
         // Message size is incompatible
         if (lastSignal.Signal.StartBit + lastSignal.Signal.Size > data.Length) return false;
 

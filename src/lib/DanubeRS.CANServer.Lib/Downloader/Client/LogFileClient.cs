@@ -1,7 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 
-namespace DanubeRS.CanServerUtils.Lib.LogFileClient;
+namespace DanubeRS.CANServer.Downloader.Downloader.Client;
 
 public class LogFileClient : IDisposable
 {

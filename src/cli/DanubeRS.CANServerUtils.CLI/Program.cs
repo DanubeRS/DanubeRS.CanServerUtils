@@ -3,15 +3,16 @@
 using System.Diagnostics;
 using System.Threading.Tasks.Dataflow;
 using CommandLine;
+using DanubeRS.CANServer.Downloader.BinaryLogs;
+using DanubeRS.CANServer.Downloader.Downloader;
+using DanubeRS.CANServer.Downloader.Downloader.Client;
 using DanubeRS.CANServerUtils.CLI;
-using DanubeRS.CanServerUtils.Lib.BinaryLogs;
-using DanubeRS.CanServerUtils.Lib.DBC;
-using DanubeRS.CanServerUtils.Lib.Downloader;
-using DanubeRS.CanServerUtils.Lib.LogFileClient;
+using DanubeRS.CanServerUtils.Lib;
 using InfluxDB.Client;
 using InfluxDB.Client.Api.Domain;
 using InfluxDB.Client.Writes;
 using Microsoft.Extensions.Logging;
+
 using File = System.IO.File;
 using LogLevel = Microsoft.Extensions.Logging.LogLevel;
 
@@ -37,7 +38,7 @@ async Task<int> DownloadAndParse(DownloadAndParseOptions options)
     var archiveDirectory = Path.Combine(options.OutputPath.Replace("~",
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)), "ARCHIVE");
     Directory.CreateDirectory(archiveDirectory);
-    var database = await BootstrapDatabase(loggerFactory, options);
+    var database = await BootstrapDatabase(options);
     var inputFile = new BufferBlock<string>();
     var writeFile = new ActionBlock<string>(async s =>
     {
@@ -73,7 +74,7 @@ async Task<int> Parse(ParseOptions options)
 {
     while (true)
     {
-        var database = await BootstrapDatabase(loggerFactory, options);
+        var database = await BootstrapDatabase(options);
         var archiveDirectory = options.ArchivePath?.Replace("~",
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
 
@@ -106,8 +107,9 @@ parserResult.MapResult(
     (DownloadAndParseOptions opts) => DownloadAndParse(opts).GetAwaiter().GetResult(),
     errors => 1
 );
+return;
 
-async Task<Database> BootstrapDatabase(ILoggerFactory loggerFactory, IParseOptions parseOptions)
+async Task<Database> BootstrapDatabase(IParseOptions parseOptions)
 {
     var database = new Database(loggerFactory.CreateLogger<Database>());
     foreach (var dbc in parseOptions.Databases)

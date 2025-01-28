@@ -2,7 +2,7 @@ using System.Net.Sockets;
 using System.Text;
 using Microsoft.Extensions.Logging;
 
-namespace DanubeRS.CANServerUtils.Pandas;
+namespace DanubeRS.CANServer.Downloader.Pandas;
 
 public class PandasClientFactory
 {
@@ -85,21 +85,21 @@ public class PandasClientFactory
                     _logger.Log(LogLevel.Debug, "Recieved FrameId: {Bytes}", BytesToString(buffer));
                     var frameIdInt = BitConverter.ToUInt32(buffer);
                     var frameId = frameIdInt >> 21;
-                    
+
                     // Get frame data
                     Array.Copy(result.Buffer, offset + 4, buffer, 0, 4);
                     var frameDetailsInt = BitConverter.ToUInt32(buffer);
                     _logger.Log(LogLevel.Trace, "FrameDetails: {Bytes}", BytesToString(buffer));
                     var frameLength = frameDetailsInt & 0x0F;
                     var frameBusId = frameDetailsInt >> 4;
-                    
+
                     // Build frame
                     var frameData = new byte[8];
                     Array.Copy(result.Buffer, offset + 8, frameData, 0, 8);
                     _logger.Log(LogLevel.Trace, "FrameData: {Bytes}", BytesToString(frameData));
                     var pandasMessageFrame = new PandasMessageFrame(frameId, frameLength, frameBusId, frameData);
                     frames.Add(pandasMessageFrame);
-                    
+
                     // If we have an ACK packet, then the client is now ready to accept streamed frames
                     if (!_ackCompletionSource.Task.IsCompleted && frameId == 6)
                     {
@@ -115,7 +115,8 @@ public class PandasClientFactory
             }
         }
 
-        private static string BytesToString(byte[] buffer) => string.Join(' ', buffer.Select(b => b.ToString("X2")).ToArray());
+        private static string BytesToString(byte[] buffer) =>
+            string.Join(' ', buffer.Select(b => b.ToString("X2")).ToArray());
 
 
         public async Task<bool> Track(params (byte busId, byte[] frameId)[] messages)
@@ -132,7 +133,7 @@ public class PandasClientFactory
             return true;
         }
 
-        public Task Handle => _listenLoop;
+        public Task AliveHandle => _listenLoop;
 
         public void Dispose()
         {
@@ -141,23 +142,16 @@ public class PandasClientFactory
     }
 }
 
-public class PandasMessage(params PandasMessageFrame[] frames)
+public record PandasMessage(params PandasMessageFrame[] Frames)
 {
     public DateTimeOffset Timestamp { get; } = DateTimeOffset.UtcNow;
-    public PandasMessageFrame[] Frames { get; } = frames;
 }
 
-public class PandasMessageFrame(uint frameId, uint frameLength, uint frameBusId, byte[] frameData)
-{
-    public uint FrameId { get; } = frameId;
-    public uint FrameLength { get; } = frameLength;
-    public uint FrameBusId { get; } = frameBusId;
-    public byte[] FrameData { get; } = frameData;
-}
+public record PandasMessageFrame(uint FrameId, uint FrameLength, uint FrameBusId, byte[] FrameData);
 
 public interface IPandasClientInstance : IDisposable
 {
     Task<bool> Track(params (byte busId, byte[] frameId)[] messages);
     Task<bool> Untrack(params (byte busId, byte[] frameId)[] messages);
-    Task Handle { get; }
+    Task AliveHandle { get; }
 }
