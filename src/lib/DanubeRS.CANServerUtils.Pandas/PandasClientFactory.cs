@@ -76,23 +76,27 @@ public class PandasClientFactory
                 var offset = 0;
                 cancellationToken.ThrowIfCancellationRequested();
                 var result = await _client.ReceiveAsync(cancellationToken);
+                _logger.Log(LogLevel.Information, "Result: {Bytes}", BytesToString(result.Buffer));
                 while (offset < result.Buffer.Length)
                 {
                     Array.Clear(buffer);
                     // Get frame
-                    Array.Copy(result.Buffer, buffer, 4);
-                    var frameIdInt = BitConverter.ToInt32(buffer);
+                    Array.Copy(result.Buffer, offset, buffer, 0, 4);
+                    _logger.Log(LogLevel.Information, "FrameId: {Bytes}", BytesToString(buffer));
+                    var frameIdInt = BitConverter.ToUInt32(buffer);
                     var frameId = frameIdInt >> 21;
                     
                     // Get frame data
-                    Array.Copy(result.Buffer, 4, buffer, 0, 4);
-                    var frameDetailsInt = BitConverter.ToInt32(buffer);
+                    Array.Copy(result.Buffer, offset + 4, buffer, 0, 4);
+                    var frameDetailsInt = BitConverter.ToUInt32(buffer);
+                    _logger.Log(LogLevel.Information, "FrameDetails: {Bytes}", BytesToString(buffer));
                     var frameLength = frameDetailsInt & 0x0F;
                     var frameBusId = frameDetailsInt >> 4;
                     
                     // Build frame
                     var frameData = new byte[8];
-                    Array.Copy(result.Buffer, 8, frameData, 0, 8);
+                    Array.Copy(result.Buffer, offset + 8, frameData, 0, 8);
+                    _logger.Log(LogLevel.Information, "Framedata: {Bytes}", BytesToString(frameData));
                     var pandasMessageFrame = new PandasMessageFrame(frameId, frameLength, frameBusId, frameData);
                     frames.Add(pandasMessageFrame);
                     
@@ -110,6 +114,8 @@ public class PandasClientFactory
                 frames.Clear();
             }
         }
+
+        private static string BytesToString(byte[] buffer) => string.Join(' ', buffer.Select(b => b.ToString("X2")).ToArray());
 
 
         public async Task<bool> Track(params (byte busId, byte[] frameId)[] messages)
@@ -141,11 +147,11 @@ public class PandasMessage(params PandasMessageFrame[] frames)
     public PandasMessageFrame[] Frames { get; } = frames;
 }
 
-public class PandasMessageFrame(int frameId, int frameLength, int frameBusId, byte[] frameData)
+public class PandasMessageFrame(uint frameId, uint frameLength, uint frameBusId, byte[] frameData)
 {
-    public int FrameId { get; } = frameId;
-    public int FrameLength { get; } = frameLength;
-    public int FrameBusId { get; } = frameBusId;
+    public uint FrameId { get; } = frameId;
+    public uint FrameLength { get; } = frameLength;
+    public uint FrameBusId { get; } = frameBusId;
     public byte[] FrameData { get; } = frameData;
 }
 

@@ -131,7 +131,7 @@ public class Reader
                     throw new Exception("Invalid Frame");
                 }
 
-                return new LogReaderFrame(frameTime, frameId, busId, framePayload);
+                return new LogReaderFrame(frameTime, (uint)frameId, (uint)busId, framePayload);
             }
             else
             {
@@ -191,12 +191,12 @@ public class Reader
 
                     var framePayload = new byte[frameLength];
                     _stream.ReadExactly(framePayload);
-                    return new LogReaderFrame(frameTime, frameId, busId, framePayload);
+                    return new LogReaderFrame(frameTime, frameId, (uint)busId, framePayload);
             }
         }
     }
 }
 
-public record LogReaderFrame(ulong FrameTime, int FrameId, int BusId, byte[] FramePayload)
+public record LogReaderFrame(ulong FrameTime, uint FrameId, uint BusId, byte[] FramePayload)
 {
 }

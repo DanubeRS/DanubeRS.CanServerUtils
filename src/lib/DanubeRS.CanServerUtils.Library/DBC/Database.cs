@@ -28,7 +28,7 @@ public class Database(ILogger<Database> logger)
         public readonly string[] Comments = [];
     }
 
-    private readonly Dictionary<int, MessageDefinition> _messageDefn = new();
+    private readonly Dictionary<uint, MessageDefinition> _messageDefn = new();
     private readonly byte[] _signalValueBytes = new byte[8];
 
     public void AddFile(TextReader reader)
@@ -45,15 +45,15 @@ public class Database(ILogger<Database> logger)
     {
         foreach (var message in parsed.Messages)
         {
-            _messageDefn.TryAdd(message.Header.Id, new MessageDefinition(message, parsed));
+            _messageDefn.TryAdd((uint)message.Header.Id, new MessageDefinition(message, parsed));
         }
     }
 
-    public bool TryParseBinaryMessage(int frameId, byte[] data, [NotNullWhen(true)] out MessageValue? value,
+    public bool TryParseBinaryMessage(uint frameId, byte[] data, [NotNullWhen(true)] out MessageValue? value,
         [NotNullWhen(true)] out MessageDefinition? defn)
     {
         value = null;
-        if (!_messageDefn.TryGetValue(frameId, out defn))
+        if (!_messageDefn.TryGetValue((uint)frameId, out defn))
         {
             return false;
         }

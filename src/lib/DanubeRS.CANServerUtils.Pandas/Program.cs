@@ -54,5 +54,5 @@ void HandleMessages(PandasMessage message)
 }
 
 var instance = await factory.CreateAsync(HandleMessages, CancellationToken.None);
-// await instance.Track((0x0F, [0x05, 0x00]), (0x0F, [0x05, 0x02]), (0x01, [0x02, 0x01]));
+// await instance.Track((0x0F, [0x05, 0x00]), (0x01, []));
 await instance.Handle;
