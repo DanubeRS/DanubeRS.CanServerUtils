@@ -2,7 +2,7 @@ using System.Net.Sockets;
 using System.Text;
 using Microsoft.Extensions.Logging;
 
-namespace DanubeRS.CANServer.Downloader.Pandas;
+namespace DanubeRS.CANServer.Lib.Pandas;
 
 public class PandasClientFactory
 {
@@ -62,7 +62,7 @@ public class PandasClientFactory
             {
                 if (cancellationToken.IsCancellationRequested) break;
                 await _client.SendAsync(Encoding.UTF8.GetBytes("ehllo"), cancellationToken);
-                _logger.LogInformation("Heartbeat sent");
+                _logger.LogDebug("Heartbeat sent");
                 await Task.Delay(5000, cancellationToken);
             }
         }
@@ -76,7 +76,7 @@ public class PandasClientFactory
                 var offset = 0;
                 cancellationToken.ThrowIfCancellationRequested();
                 var result = await _client.ReceiveAsync(cancellationToken);
-                _logger.Log(LogLevel.Information, "Result: {Bytes}", BytesToString(result.Buffer));
+                _logger.Log(LogLevel.Trace, "Result: {Bytes}", BytesToString(result.Buffer));
                 while (offset < result.Buffer.Length)
                 {
                     Array.Clear(buffer);

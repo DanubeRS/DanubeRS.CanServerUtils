@@ -1,13 +1,13 @@
 using System.Diagnostics;
 using System.Net;
-using DanubeRS.CANServer.Downloader.Downloader.Client;
+using DanubeRS.CANServer.Lib.Downloader.Client;
 using Humanizer;
 using Microsoft.Extensions.Logging;
 using Polly;
 using Polly.Retry;
 using Polly.Timeout;
 
-namespace DanubeRS.CANServer.Downloader.Downloader;
+namespace DanubeRS.CANServer.Lib.Downloader;
 
 /// <summary>
 /// Downloader facade for listing, iterating, downloading, and optionally deleting files from a CANServer SD Card

@@ -3,7 +3,7 @@
 using System.Globalization;
 using System.Net.Sockets;
 using System.Text;
-using DanubeRS.CANServer.Downloader.Pandas;
+using DanubeRS.CANServer.Lib.Pandas;
 using DanubeRS.CanServerUtils.Lib;
 using Microsoft.Extensions.Logging;
 
@@ -33,6 +33,11 @@ async Task<Database> BootstrapDatabase(string[] dbs)
 
 var db = await BootstrapDatabase(["~/CANTEST/Model3CAN.dbc", "~/CANTEST/CANServer.dbc"]);
 
+var instance = await factory.CreateAsync(HandleMessages, CancellationToken.None);
+// await instance.Track((0x0F, [0x05, 0x00]), (0x01, []));
+await instance.AliveHandle;
+return;
+
 void HandleMessages(PandasMessage message)
 {
     logger.LogInformation("Received {Message} at {timestamp:s}", message.Frames.Length, message.Timestamp);
@@ -52,7 +57,3 @@ void HandleMessages(PandasMessage message)
         }
     }
 }
-
-var instance = await factory.CreateAsync(HandleMessages, CancellationToken.None);
-// await instance.Track((0x0F, [0x05, 0x00]), (0x01, []));
-await instance.AliveHandle;

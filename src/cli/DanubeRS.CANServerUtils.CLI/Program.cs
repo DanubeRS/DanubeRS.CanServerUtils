@@ -3,9 +3,9 @@
 using System.Diagnostics;
 using System.Threading.Tasks.Dataflow;
 using CommandLine;
-using DanubeRS.CANServer.Downloader.BinaryLogs;
-using DanubeRS.CANServer.Downloader.Downloader;
-using DanubeRS.CANServer.Downloader.Downloader.Client;
+using DanubeRS.CANServer.Lib.BinaryLogs;
+using DanubeRS.CANServer.Lib.Downloader;
+using DanubeRS.CANServer.Lib.Downloader.Client;
 using DanubeRS.CANServerUtils.CLI;
 using DanubeRS.CanServerUtils.Lib;
 using InfluxDB.Client;

@@ -1,4 +1,4 @@
-namespace DanubeRS.CANServer.Downloader.Downloader.Client;
+namespace DanubeRS.CANServer.Lib.Downloader.Client;
 
 public class LogFileClientFactory
 {
