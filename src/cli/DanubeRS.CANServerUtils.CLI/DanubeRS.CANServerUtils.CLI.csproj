@@ -18,13 +18,13 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\DanubeRS.CanServerUtils.Library\DanubeRS.CanServerUtils.Library.csproj"/>
-    </ItemGroup>
-
-    <ItemGroup>
         <Content Include="..\.dockerignore">
             <Link>.dockerignore</Link>
         </Content>
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\lib\DanubeRS.CanServerUtils.Library\DanubeRS.CanServerUtils.Library.csproj" />
     </ItemGroup>
 
 </Project>
