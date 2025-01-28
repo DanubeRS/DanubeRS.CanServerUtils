@@ -82,28 +82,28 @@ public class PandasClientFactory
                     Array.Clear(buffer);
                     // Get frame
                     Array.Copy(result.Buffer, offset, buffer, 0, 4);
-                    _logger.Log(LogLevel.Information, "FrameId: {Bytes}", BytesToString(buffer));
+                    _logger.Log(LogLevel.Debug, "Recieved FrameId: {Bytes}", BytesToString(buffer));
                     var frameIdInt = BitConverter.ToUInt32(buffer);
                     var frameId = frameIdInt >> 21;
                     
                     // Get frame data
                     Array.Copy(result.Buffer, offset + 4, buffer, 0, 4);
                     var frameDetailsInt = BitConverter.ToUInt32(buffer);
-                    _logger.Log(LogLevel.Information, "FrameDetails: {Bytes}", BytesToString(buffer));
+                    _logger.Log(LogLevel.Trace, "FrameDetails: {Bytes}", BytesToString(buffer));
                     var frameLength = frameDetailsInt & 0x0F;
                     var frameBusId = frameDetailsInt >> 4;
                     
                     // Build frame
                     var frameData = new byte[8];
                     Array.Copy(result.Buffer, offset + 8, frameData, 0, 8);
-                    _logger.Log(LogLevel.Information, "Framedata: {Bytes}", BytesToString(frameData));
+                    _logger.Log(LogLevel.Trace, "FrameData: {Bytes}", BytesToString(frameData));
                     var pandasMessageFrame = new PandasMessageFrame(frameId, frameLength, frameBusId, frameData);
                     frames.Add(pandasMessageFrame);
                     
                     // If we have an ACK packet, then the client is now ready to accept streamed frames
                     if (!_ackCompletionSource.Task.IsCompleted && frameId == 6)
                     {
-                        _logger.LogInformation("ACK received");
+                        _logger.LogDebug("ACK received, marking as ready for listening!");
                         _ackCompletionSource.TrySetResult(true);
                     }
 
