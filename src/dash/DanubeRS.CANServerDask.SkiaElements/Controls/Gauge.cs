@@ -7,17 +7,19 @@ public class Gauge : IRenderableControl
     private readonly decimal _value;
     private readonly float _width;
     private readonly float _height;
+    private readonly float _minValue;
+    private readonly float _maxValue;
+
     // Define the sweep angle for each segment of the gauge
     private const float SweepAngle = 67.5f;
-    // Define the minimum and maximum values for the gauge
-    private const float MinValue = 0f;
-    private const float MaxValue = 100f;
 
-    public Gauge(decimal value, float width, float height)
+    public Gauge(decimal value, float width, float height, decimal minValue, decimal maxValue)
     {
         _value = value;
         _width = width;
         _height = height;
+        _minValue = (float)minValue;
+        _maxValue = (float)maxValue;
     }
     public void Render(SKCanvas canvas)
     {
@@ -106,7 +108,7 @@ public class Gauge : IRenderableControl
         SKCanvas canvas,
         float value)
     {
-        float angle = -135f + value / 100 * 270f;
+        float angle = -135f + (value - _minValue) / (_maxValue - _minValue) * 270f;
         canvas.Save();
         canvas.RotateDegrees(angle);
 

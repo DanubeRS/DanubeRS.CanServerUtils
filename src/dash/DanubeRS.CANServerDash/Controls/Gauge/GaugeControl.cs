@@ -1,5 +1,7 @@
 using System;
+using System.Diagnostics.Metrics;
 using System.Linq;
+using System.Runtime.Versioning;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
@@ -24,6 +26,9 @@ public class Gauge : Control
 
     public static readonly StyledProperty<decimal> ValueProperty =
         AvaloniaProperty.Register<Gauge, decimal>(nameof(Value), 0);
+    public static readonly StyledProperty<decimal> MinValueProperty =
+        AvaloniaProperty.Register<Gauge, decimal>(nameof(MinValue), 0);
+    public static readonly StyledProperty<decimal> MaxValueProperty = AvaloniaProperty.Register<Gauge, decimal>(nameof(MaxValue), 5000);
 
     private decimal Value
     {
@@ -31,16 +36,33 @@ public class Gauge : Control
         set => SetValue(ValueProperty, value);
     }
 
+    private decimal MinValue
+    {
+        get => GetValue(MinValueProperty);
+        set => SetValue(MinValueProperty, value);
+    }
+
+    private decimal MaxValue
+    {
+        get => GetValue(MaxValueProperty);
+        set => SetValue(MaxValueProperty, value);
+    }
+    
+
     class GaugeDrawOp : ICustomDrawOperation
     {
         private readonly decimal _value;
         private readonly IImmutableGlyphRunReference? _noSkia;
+        private readonly decimal _minValue;
+        private readonly decimal _maxValue;
 
-        public GaugeDrawOp(Rect bounds, GlyphRun noSkia, decimal value)
+        public GaugeDrawOp(Rect bounds, GlyphRun noSkia, decimal value, decimal minValue, decimal maxValue)
         {
             _value = value;
             Bounds = bounds;
             _noSkia = noSkia.TryCreateImmutableGlyphRunReference();
+            _minValue = minValue;
+            _maxValue = maxValue;
         }
         public void Dispose()
         {
@@ -64,7 +86,7 @@ public class Gauge : Control
             var canvas = lease.SkCanvas;
             canvas.Save();
 
-            var render = new CANServerDask.SkiaElements.Controls.Gauge(_value, (float)Bounds.Width, (float)Bounds.Height);
+            var render = new CANServerDask.SkiaElements.Controls.Gauge(_value, (float)Bounds.Width, (float)Bounds.Height, _minValue, _maxValue);
             render.Render(canvas);
             canvas.Restore();
         }
@@ -72,7 +94,7 @@ public class Gauge : Control
     
     public override void Render(DrawingContext context)
     {
-        context.Custom(new GaugeDrawOp(new Rect(0, 0, Bounds.Width, Bounds.Height), _noSkia, Value));
+        context.Custom(new GaugeDrawOp(new Rect(0, 0, Bounds.Width, Bounds.Height), _noSkia, Value, MinValue, MaxValue));
         Dispatcher.UIThread.InvokeAsync(InvalidateVisual, DispatcherPriority.Background);
     }
 }

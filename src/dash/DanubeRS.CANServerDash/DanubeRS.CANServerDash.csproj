@@ -25,6 +25,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\lib\DanubeRS.CANServer.Lib\DanubeRS.CANServer.Lib.csproj" />
+    <ProjectReference Include="..\..\lib\DanubeRS.DBCParser\DanubeRS.DBCParser.csproj" />
     <ProjectReference Include="..\DanubeRS.CANServerDask.SkiaElements\DanubeRS.CANServerDask.SkiaElements.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="DBC\CANServer.dbc" />
+    <EmbeddedResource Include="DBC\Model3CAN.dbc" />
   </ItemGroup>
 </Project>

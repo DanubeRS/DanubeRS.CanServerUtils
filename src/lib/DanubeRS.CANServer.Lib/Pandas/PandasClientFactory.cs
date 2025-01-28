@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text;
 using Microsoft.Extensions.Logging;
@@ -20,7 +21,7 @@ public class PandasClientFactory
     }
 
     public async Task<IPandasClientInstance> CreateAsync(Action<PandasMessage> onMessageReceived,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken = default)
     {
         var instance = new PandasClientInstance(_url, _port, _loggerFactory.CreateLogger<PandasClientInstance>());
         await instance.StartListening(cancellationToken, onMessageReceived);
@@ -38,7 +39,9 @@ public class PandasClientFactory
         public PandasClientInstance(string address, int port, ILogger logger)
         {
             _logger = logger;
-            _client = new UdpClient(address, port);
+            _client = new UdpClient();
+            _client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+            _client.Connect("192.168.8.243", 1338);
             _ackCompletionSource = new TaskCompletionSource<bool>();
         }
 
@@ -62,6 +65,7 @@ public class PandasClientFactory
             {
                 await _client.SendAsync(Encoding.UTF8.GetBytes("ehllo"), cancellationToken);
                 _logger.LogDebug("Heartbeat sent");
+                Trace.TraceInformation(_client.Client.LocalEndPoint?.ToString());
                 await Task.Delay(5000, cancellationToken);
             }
         }
