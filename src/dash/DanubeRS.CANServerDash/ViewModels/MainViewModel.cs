@@ -73,23 +73,26 @@ public partial class MainViewModel : ReactiveObject
                 {
                     var battCurr = messageValue.Signals.FirstOrDefault(s => s.SignalName == "SmoothBattCurrent132");
                     var battVolt = messageValue.Signals.FirstOrDefault(s => s.SignalName == "BattVoltage132");
-                    var battPow = battCurr?.Value * battVolt?.Value;
+                    var battPow = (decimal?)(battCurr?.Value * battVolt?.Value);
                     if (battPow == null) continue;
-                    Dispatcher.UIThread.Post(() => BatteryPower = (decimal)battPow);
+                    if (battPow != BatteryPower)
+                        Dispatcher.UIThread.Post(() => BatteryPower = battPow.Value);
                     break;
                 }
                 case 0x332:
                 {
-                    var battTemp = messageValue.Signals.FirstOrDefault(s => s.SignalName == "BattBrickTempMax332");
+                    var battTemp = (decimal?)messageValue.Signals.FirstOrDefault(s => s.SignalName == "BattBrickTempMax332")?.Value;
                     if (battTemp == null) continue;
-                    Dispatcher.UIThread.Post(() => BatteryTemp = (decimal)battTemp.Value);
+                    if (battTemp != BatteryTemp)
+                        Dispatcher.UIThread.Post(() => BatteryTemp = battTemp.Value);
                     break;
                 }
                 case 0x292:
                 {
-                    var battSoC = messageValue.Signals.FirstOrDefault(s => s.SignalName == "SOCUI292");
+                    var battSoC = (decimal?)messageValue.Signals.FirstOrDefault(s => s.SignalName == "SOCUI292")?.Value;
                     if (battSoC == null) continue;
-                    Dispatcher.UIThread.Post(() => BatterySoC = (decimal)battSoC.Value);
+                    if (battSoC != BatterySoC)
+                        Dispatcher.UIThread.Post(() => BatterySoC = (decimal)battSoC.Value);
                     break;
                 }
             }

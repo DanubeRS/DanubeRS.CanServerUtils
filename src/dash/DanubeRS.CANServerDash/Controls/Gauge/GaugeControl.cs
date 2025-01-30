@@ -28,29 +28,30 @@ public class Gauge : Control
     public static readonly StyledProperty<decimal> ValueProperty =
         AvaloniaProperty.Register<Gauge, decimal>(nameof(Value), 0);
     public static readonly StyledProperty<decimal> MinValueProperty =
-        AvaloniaProperty.Register<Gauge, decimal>(nameof(MinValue), -5000);
-    public static readonly StyledProperty<decimal> MaxValueProperty = AvaloniaProperty.Register<Gauge, decimal>(nameof(MaxValue), 5000);
+        AvaloniaProperty.Register<Gauge, decimal>(nameof(MinValue), 0);
+    public static readonly StyledProperty<decimal> MaxValueProperty = 
+        AvaloniaProperty.Register<Gauge, decimal>(nameof(MaxValue), 100);
 
-    private decimal Value
+    public decimal Value
     {
         get => GetValue(ValueProperty);
         set => SetValue(ValueProperty, value);
     }
 
-    private decimal MinValue
+    public decimal MinValue
     {
         get => GetValue(MinValueProperty);
         set => SetValue(MinValueProperty, value);
     }
 
-    private decimal MaxValue
+    public decimal MaxValue
     {
         get => GetValue(MaxValueProperty);
         set => SetValue(MaxValueProperty, value);
     }
-    
 
-    class GaugeDrawOp : ICustomDrawOperation
+
+    private class GaugeDrawOp : ICustomDrawOperation
     {
         private readonly decimal _value;
         private readonly IImmutableGlyphRunReference? _noSkia;

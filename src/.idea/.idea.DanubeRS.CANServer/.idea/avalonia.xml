@@ -3,7 +3,9 @@
   <component name="AvaloniaProject">
     <option name="projectPerEditor">
       <map>
+        <entry key="dash/DanubeRS.CANServerDash/App.axaml" value="dash/DanubeRS.CANServerDash.Desktop/DanubeRS.CANServerDash.Desktop.csproj" />
         <entry key="dash/DanubeRS.CANServerDash/Views/MainView.axaml" value="dash/DanubeRS.CANServerDash.Desktop/DanubeRS.CANServerDash.Desktop.csproj" />
+        <entry key="dash/DanubeRS.CANServerDash/Views/MainWindow.axaml" value="dash/DanubeRS.CANServerDash.Desktop/DanubeRS.CANServerDash.Desktop.csproj" />
       </map>
     </option>
   </component>

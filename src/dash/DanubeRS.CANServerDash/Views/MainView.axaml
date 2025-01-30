@@ -15,8 +15,8 @@
   </Design.DataContext>
 
     <Grid ColumnDefinitions="*,*,*" RowDefinitions="*,*,*">
-        <gauge:Gauge Grid.Column="0" Grid.Row="1" Value="{Binding BatteryPower}" />
-        <gauge:Gauge Grid.Column="1" Grid.Row="1" Value="{Binding BatteryTemp}" />
-        <gauge:Gauge Grid.Column="2" Grid.Row="1" Value="{Binding BatterySoC}" />
+        <gauge:Gauge Grid.Column="0" Grid.Row="1" Value="{Binding BatteryPower}" MinValue="-5000" MaxValue="5000"/>
+        <gauge:Gauge Grid.Column="1" Grid.Row="1" Value="{Binding BatteryTemp}" MinValue="0" MaxValue="60"/>
+        <gauge:Gauge Grid.Column="2" Grid.Row="1" Value="{Binding BatterySoC}" MinValue="0" MaxValue="100"/>
     </Grid>
 </UserControl>
