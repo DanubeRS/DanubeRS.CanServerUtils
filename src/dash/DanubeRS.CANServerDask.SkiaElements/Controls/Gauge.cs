@@ -31,7 +31,7 @@ public class Gauge : IRenderableControl
         canvas.Translate(centerX, centerY);
         canvas.Scale(scale);
         
-        DrawBackground(canvas, size);
+        // DrawBackground(canvas, size);
         DrawGauge(canvas);
         DrawNeedle(canvas, (float)_value);
         DrawNeedleScrew(canvas);

@@ -7,6 +7,7 @@
         mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
         x:Class="DanubeRS.CANServerDash.Views.MainWindow"
         Icon="/Assets/avalonia-logo.ico"
+        Background="Black"
         Title="DanubeRS.CANServerDash">
         <views:MainView />
 </Window>
