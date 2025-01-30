@@ -15,9 +15,8 @@
   </Design.DataContext>
 
     <Grid ColumnDefinitions="*,*,*" RowDefinitions="*,*,*">
-        <Slider Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" Value="{Binding Slider}" Minimum="0" Maximum="5000" Ticks="100"></Slider>
-        <gauge:Gauge Grid.Column="0" Grid.Row="1" Value="{Binding Slider}" />
-        <Rectangle Grid.Column="1" Grid.Row="1" Fill="Aqua"></Rectangle>
-        <TextBlock Grid.Column="2" Grid.Row="1" Text="{Binding Slider}"></TextBlock>
+        <gauge:Gauge Grid.Column="0" Grid.Row="1" Value="{Binding BatteryPower}" />
+        <gauge:Gauge Grid.Column="1" Grid.Row="1" Value="{Binding BatteryTemp}" />
+        <gauge:Gauge Grid.Column="2" Grid.Row="1" Value="{Binding BatterySoC}" />
     </Grid>
 </UserControl>

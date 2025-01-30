@@ -39,9 +39,7 @@ public class PandasClientFactory
         public PandasClientInstance(string address, int port, ILogger logger)
         {
             _logger = logger;
-            _client = new UdpClient();
-            _client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
-            _client.Connect("192.168.8.243", 1338);
+            _client = new UdpClient(address, port);
             _ackCompletionSource = new TaskCompletionSource<bool>();
         }
 
@@ -63,9 +61,15 @@ public class PandasClientFactory
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                await _client.SendAsync(Encoding.UTF8.GetBytes("ehllo"), cancellationToken);
-                _logger.LogDebug("Heartbeat sent");
-                Trace.TraceInformation(_client.Client.LocalEndPoint?.ToString());
+                try
+                {
+                    await _client.SendAsync("ehllo"u8.ToArray(), cancellationToken);
+                    _logger.LogDebug("Heartbeat sent");
+                }
+                catch (Exception e)
+                {
+                    _logger.LogWarning(e, "Failed to send heartbeat");
+                }
                 await Task.Delay(5000, cancellationToken);
             }
         }
@@ -77,7 +81,16 @@ public class PandasClientFactory
             while (!cancellationToken.IsCancellationRequested)
             {
                 var offset = 0;
-                var result = await _client.ReceiveAsync(cancellationToken);
+                UdpReceiveResult result;
+                try
+                {
+                    result = await _client.ReceiveAsync(cancellationToken);
+                }
+                catch (Exception e)
+                {
+                    _logger.LogWarning(e, "Failed to receive messages");
+                    continue;
+                }
                 _logger.Log(LogLevel.Trace, "Result: {Bytes}", BytesToString(result.Buffer));
                 while (offset < result.Buffer.Length)
                 {
@@ -120,20 +133,28 @@ public class PandasClientFactory
         private static string BytesToString(byte[] buffer) =>
             string.Join(' ', buffer.Select(b => b.ToString("X2")).ToArray());
 
-
-        public async Task<bool> Track(params (byte busId, byte[] frameId)[] messages)
+        private static class TrackerBytes
         {
-            var trackerBytes = messages.SelectMany(m => new[] { m.busId, m.frameId[0], m.frameId[1] }).ToArray();
-            await _client.SendAsync(new byte[] { 0x0F }.Concat(trackerBytes).ToArray());
+            public const byte Track = 0x0F;
+            public const byte Untrack = 0x0E;
+        }
+
+        public async Task<bool> Track(params (byte busId, (byte first, byte second) frameId)[] messages)
+        {
+            return await SendTrackerPayload(messages, TrackerBytes.Track);
+        }
+        public async Task<bool> Untrack(params (byte busId, (byte first, byte second) frameId)[] messages)
+        {
+            return await SendTrackerPayload(messages, TrackerBytes.Untrack);
+        }
+        private async Task<bool> SendTrackerPayload((byte busId, (byte first, byte second) frameId)[] messages,
+            byte trackerFlag)
+        {
+            var trackerBytes = messages.SelectMany(m => new[] { m.busId, m.frameId.first, m.frameId.second }).ToArray();
+            await _client.SendAsync(new byte[] { trackerFlag }.Concat(trackerBytes).ToArray());
             return true;
         }
 
-        public async Task<bool> Untrack(params (byte busId, byte[] frameId)[] messages)
-        {
-            var trackerBytes = messages.SelectMany(m => new[] { m.busId, m.frameId[0], m.frameId[1] }).ToArray();
-            await _client.SendAsync(new byte[] { 0x0E }.Concat(trackerBytes).ToArray());
-            return true;
-        }
 
         public Task AliveHandle => _listenLoop;
 
@@ -153,7 +174,7 @@ public record PandasMessageFrame(uint FrameId, uint FrameLength, uint FrameBusId
 
 public interface IPandasClientInstance : IDisposable
 {
-    Task<bool> Track(params (byte busId, byte[] frameId)[] messages);
-    Task<bool> Untrack(params (byte busId, byte[] frameId)[] messages);
+    Task<bool> Track(params (byte busId, (byte first, byte second) frameId)[] messages);
+    Task<bool> Untrack(params (byte busId, (byte first, byte second) frameId)[] messages);
     Task AliveHandle { get; }
 }

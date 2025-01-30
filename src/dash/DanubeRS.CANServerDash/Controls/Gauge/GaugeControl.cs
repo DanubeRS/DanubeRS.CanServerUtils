@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Linq;
 using System.Runtime.Versioning;
@@ -27,7 +28,7 @@ public class Gauge : Control
     public static readonly StyledProperty<decimal> ValueProperty =
         AvaloniaProperty.Register<Gauge, decimal>(nameof(Value), 0);
     public static readonly StyledProperty<decimal> MinValueProperty =
-        AvaloniaProperty.Register<Gauge, decimal>(nameof(MinValue), 0);
+        AvaloniaProperty.Register<Gauge, decimal>(nameof(MinValue), -5000);
     public static readonly StyledProperty<decimal> MaxValueProperty = AvaloniaProperty.Register<Gauge, decimal>(nameof(MaxValue), 5000);
 
     private decimal Value
@@ -86,7 +87,7 @@ public class Gauge : Control
             var canvas = lease.SkCanvas;
             canvas.Save();
 
-            var render = new CANServerDask.SkiaElements.Controls.Gauge(_value, (float)Bounds.Width, (float)Bounds.Height, _minValue, _maxValue);
+            var render = new CANServerDask.SkiaElements.Controls.Gauge(Math.Min(Math.Max(_value, _minValue), _maxValue), (float)Bounds.Width, (float)Bounds.Height, _minValue, _maxValue);
             render.Render(canvas);
             canvas.Restore();
         }

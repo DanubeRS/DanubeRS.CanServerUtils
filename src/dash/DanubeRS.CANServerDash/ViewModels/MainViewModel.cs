@@ -22,14 +22,25 @@ public partial class MainViewModel : ReactiveObject
         Listen().ConfigureAwait(false);
     }
     
-    private decimal _Slider = 0;
-    public decimal Slider
+    private decimal _batteryPower = 0;
+    public decimal BatteryPower
     {
-        get => _Slider;
-        set
-        {
-            this.RaiseAndSetIfChanged(ref _Slider, value);
-        }
+        get => _batteryPower;
+        set => this.RaiseAndSetIfChanged(ref _batteryPower, value);
+    }
+    
+    private decimal _batteryTemp = 0;
+    public decimal BatteryTemp
+    {
+        get => _batteryTemp;
+        set => this.RaiseAndSetIfChanged(ref _batteryTemp, value);
+    }
+    
+    private decimal _batterySoC = 0;
+    public decimal BatterySoC
+    {
+        get => _batterySoC;
+        set => this.RaiseAndSetIfChanged(ref _batterySoC, value);
     }
 
     private async Task Listen()
@@ -44,9 +55,9 @@ public partial class MainViewModel : ReactiveObject
             dbc.AddFile(sr);
         }
 
-        var clientFactory = new PandasClientFactory("192.168.8.243", 1338, NullLoggerFactory.Instance);
+        var clientFactory = new PandasClientFactory("192.168.4.1", 1338, NullLoggerFactory.Instance);
         var client = await clientFactory.CreateAsync((message) => HandlePandaMessages(message, dbc));
-        await client.Track((0x01, [0x02, 0x43]));
+        await client.Track((0x01, (0x01, 0x32)), (0x01, (0x03, 0x32)), (0x01, (0x02, 0x92)));
         await client.AliveHandle;
     }
 
@@ -56,11 +67,31 @@ public partial class MainViewModel : ReactiveObject
         {
             if (!dbc.TryParseBinaryMessage(frame.FrameId, frame.FrameData, out var messageValue,
                     out var messageDefinition)) continue;
-            if (frame.FrameId != 0x243) continue;
-            foreach (var signal in messageDefinition.Signals.Where(s => s.Signal.Name == "VCRIGHT_hvacCabinTempEst"))
+            switch (frame.FrameId)
             {
-                var value = messageValue.Signals.Single(s => s.SignalName == signal.Signal.Name).Value;
-                Dispatcher.UIThread.Post(() => Slider = (decimal)value);
+                case 0x132:
+                {
+                    var battCurr = messageValue.Signals.FirstOrDefault(s => s.SignalName == "SmoothBattCurrent132");
+                    var battVolt = messageValue.Signals.FirstOrDefault(s => s.SignalName == "BattVoltage132");
+                    var battPow = battCurr?.Value * battVolt?.Value;
+                    if (battPow == null) continue;
+                    Dispatcher.UIThread.Post(() => BatteryPower = (decimal)battPow);
+                    break;
+                }
+                case 0x332:
+                {
+                    var battTemp = messageValue.Signals.FirstOrDefault(s => s.SignalName == "BattBrickTempMax332");
+                    if (battTemp == null) continue;
+                    Dispatcher.UIThread.Post(() => BatteryTemp = (decimal)battTemp.Value);
+                    break;
+                }
+                case 0x292:
+                {
+                    var battSoC = messageValue.Signals.FirstOrDefault(s => s.SignalName == "SOCUI292");
+                    if (battSoC == null) continue;
+                    Dispatcher.UIThread.Post(() => BatterySoC = (decimal)battSoC.Value);
+                    break;
+                }
             }
         }
     }

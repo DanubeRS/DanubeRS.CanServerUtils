@@ -34,7 +34,7 @@ async Task<Database> BootstrapDatabase(string[] dbs)
 var db = await BootstrapDatabase(["~/CANTEST/Model3CAN.dbc", "~/CANTEST/CANServer.dbc"]);
 
 var instance = await factory.CreateAsync(HandleMessages, CancellationToken.None);
-// await instance.Track((0x0F, [0x05, 0x00]), (0x01, []));
+await instance.Track((0x01, (0x01, 0x32)));
 await instance.AliveHandle;
 return;
 
