@@ -7,6 +7,7 @@
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
              x:Class="DanubeRS.CANServerDash.Views.MainView"
              x:DataType="vm:MainViewModel"
+             Background="Black"
              >
   <Design.DataContext>
     <!-- This only sets the DataContext for the previewer in an IDE,
@@ -14,9 +15,10 @@
     <vm:MainViewModel />
   </Design.DataContext>
 
-    <Grid ColumnDefinitions="*,*,*" RowDefinitions="*,*,*">
-        <gauge:Gauge Grid.Column="0" Grid.Row="1" Value="{Binding BatteryPower}" MinValue="-5000" MaxValue="5000"/>
-        <gauge:Gauge Grid.Column="1" Grid.Row="1" Value="{Binding BatteryTemp}" MinValue="0" MaxValue="60"/>
-        <gauge:Gauge Grid.Column="2" Grid.Row="1" Value="{Binding BatterySoC}" MinValue="0" MaxValue="100"/>
+    <Grid ColumnDefinitions="*,*" RowDefinitions="*,*">
+        <gauge:Gauge Grid.Column="0" Grid.Row="0" Value="{Binding BatteryPower}" MinValue="-70000" MaxValue="300000" GuageName="Battery (W)" Precision="0"/>
+        <gauge:Gauge Grid.Column="1" Grid.Row="0" Value="{Binding BatteryTemp}" MinValue="0" MaxValue="60" GuageName="Battery (c)" Precision="1"/>
+        <gauge:Gauge Grid.Column="0" Grid.Row="1" Value="{Binding BatterySoC}" MinValue="0" MaxValue="100" GuageName="Battery (%)" Precision="1"/>
+        <gauge:Gauge Grid.Column="1" Grid.Row="1" Value="{Binding InterfaceRate}" MinValue="0" MaxValue="3000" GuageName="IF Speed" Precision="0"/>
     </Grid>
 </UserControl>

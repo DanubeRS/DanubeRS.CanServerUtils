@@ -4,22 +4,26 @@ namespace DanubeRS.CANServerDask.SkiaElements.Controls;
 
 public class Gauge : IRenderableControl
 {
+    private readonly string? _name;
     private readonly decimal _value;
     private readonly float _width;
     private readonly float _height;
     private readonly float _minValue;
     private readonly float _maxValue;
+    private readonly int _precision;
 
     // Define the sweep angle for each segment of the gauge
     private const float SweepAngle = 67.5f;
 
-    public Gauge(decimal value, float width, float height, decimal minValue, decimal maxValue)
+    public Gauge(string? name, decimal value, float width, float height, decimal minValue, decimal maxValue, int precision = 0)
     {
-        _value = value;
+        _name = name;
+        _value = decimal.Round(value, precision, MidpointRounding.ToPositiveInfinity);
         _width = width;
         _height = height;
         _minValue = (float)minValue;
         _maxValue = (float)maxValue;
+        _precision = precision;
     }
     public void Render(SKCanvas canvas)
     {
@@ -157,9 +161,10 @@ public class Gauge : IRenderableControl
             Color = SKColors.White,
             TextSize = 12f
         };
-
+        if (_name != null)
+            DrawUnitText(canvas, _name, 95, textPaint);
         textPaint.TextSize = 16;
-        DrawUnitText(canvas, _value.ToString("F2"), 95, textPaint);
+        DrawUnitText(canvas, _value.ToString("#.##"), 75, textPaint);
     }
     
     /// <summary>

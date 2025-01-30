@@ -42,6 +42,13 @@ public partial class MainViewModel : ReactiveObject
         get => _batterySoC;
         set => this.RaiseAndSetIfChanged(ref _batterySoC, value);
     }
+    
+    private uint _interfaceRate = 0;
+    public uint InterfaceRate
+    {
+        get => _interfaceRate;
+        set => this.RaiseAndSetIfChanged(ref _interfaceRate, value);
+    }
 
     private async Task Listen()
     {
@@ -94,6 +101,14 @@ public partial class MainViewModel : ReactiveObject
                     if (battSoC == null) continue;
                     if (battSoC != BatterySoC)
                         Dispatcher.UIThread.Post(() => BatterySoC = (decimal)battSoC.Value);
+                    break;
+                }
+                case 0x500:
+                {
+                    var ifRate = (uint?)messageValue.Signals.FirstOrDefault(s => s.SignalName == "CANServer_InterfaceARate")?.Value;
+                    if (ifRate == null) continue;
+                    if (ifRate != InterfaceRate)
+                        Dispatcher.UIThread.Post(() => InterfaceRate = ifRate.Value);
                     break;
                 }
             }
