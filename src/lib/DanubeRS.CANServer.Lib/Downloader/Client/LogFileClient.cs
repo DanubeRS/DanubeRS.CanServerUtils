@@ -63,10 +63,10 @@ public class LogFileClient : IDisposable
         _client.Dispose();
     }
 
-    public async Task DeleteFile(LogFileRecord file)
+    public async Task DeleteFile(LogFileRecord file, CancellationToken cancellationToken)
     {
         await _client.PostAsync($"/logs/files/delete",
-            new FormUrlEncodedContent(new[] { new KeyValuePair<string, string>("id", file.Name) }));
+            new FormUrlEncodedContent(new[] { new KeyValuePair<string, string>("id", file.Name) }), cancellationToken);
     }
 
     public async Task ResetServer(CancellationToken cancellationToken)

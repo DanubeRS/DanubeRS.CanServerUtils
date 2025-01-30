@@ -25,13 +25,21 @@ public class Downloader(string url, ILogger<Downloader> logger)
 
     public async Task DownloadAllFiles(LogFileType type, bool deleteOnDownload = false, bool implicitLogDisable = false,
         string? outputPath = null, CancellationToken cancellationToken = default,
-        Action<string>? onFileDownloaded = null)
+        Action<string>? onFileDownloaded = null, Func<IEnumerable<LogFileRecord>, bool>? shouldRunTest = null)
     {
         using var client = CreateClient();
         var isAlive = await client.GetIsAlive(cancellationToken);
         if (!isAlive)
         {
             logger.LogWarning("Client is not alive. Returning");
+            return;
+        }
+
+        var allFiles = await GetStoredFiles(client);
+
+        if (shouldRunTest != null && !shouldRunTest.Invoke(allFiles))
+        {
+            logger.LogDebug("Download files test has failed, so not downloading anything...");
             return;
         }
 
@@ -71,21 +79,10 @@ public class Downloader(string url, ILogger<Downloader> logger)
     }
 
     private async Task DownloadAllFilesInternal(LogFileClient client, bool deleteOnDownload,
-        string? outputPath, CancellationToken cancellationToken = default, Action<string>? onDownloaded = null)
+        string? outputPath, CancellationToken cancellationToken = default, Action<string>? onDownloaded = null, IEnumerable<LogFileRecord>? allFiles = null)
     {
-        var allFiles = new List<LogFileRecord>();
         var downloadDate = DateTimeOffset.UtcNow;
-
-        long offset = 0;
-
-        bool isEnd;
-        do
-        {
-            (var files, isEnd) = await client.GetLogFiles(offset);
-            allFiles.AddRange(files);
-            offset += files.Length;
-        } while (!isEnd);
-
+        allFiles ??= await GetStoredFiles(client);
         var sw = new Stopwatch();
         var outputDir = outputPath == null
             ? new DirectoryInfo(Directory.GetCurrentDirectory())
@@ -177,7 +174,7 @@ public class Downloader(string url, ILogger<Downloader> logger)
                     try
                     {
                         logger.LogInformation("Deleting source file {file}", file.Name);
-                        await client.DeleteFile(file);
+                        await client.DeleteFile(file, cancellationToken);
                     }
                     catch (Exception e)
                     {
@@ -192,6 +189,21 @@ public class Downloader(string url, ILogger<Downloader> logger)
                 continue;
             }
         }
+    }
+
+    private static async Task<IReadOnlyCollection<LogFileRecord>> GetStoredFiles(LogFileClient client)
+    {
+        var allFiles = new List<LogFileRecord>();
+        long offset = 0;
+        bool isEnd;
+        do
+        {
+            (var files, isEnd) = await client.GetLogFiles(offset);
+            allFiles.AddRange(files);
+            offset += files.Length;
+        } while (!isEnd);
+
+        return allFiles;
     }
 
     private class DownloaderException(string message) : Exception(message)
