@@ -65,7 +65,10 @@ public partial class MainViewModel : ReactiveObject
         var url = "192.168.8.243";
         var clientFactory = new PandasClientFactory(url, 1338, NullLoggerFactory.Instance);
         var client = await clientFactory.CreateAsync((message) => HandlePandaMessages(message, dbc));
-        await client.Track((0x01, (0x01, 0x32)), (0x01, (0x03, 0x32)), (0x01, (0x02, 0x92)));
+        await client.Track(
+            new TrackingPacket(0x01, (0x01, 0x32)), 
+            new TrackingPacket(0x01, (0x03, 0x32)), 
+            new TrackingPacket(0x01, (0x02, 0x92)));
         await client.AliveHandle;
     }
 

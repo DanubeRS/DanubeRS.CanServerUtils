@@ -35,6 +35,7 @@ public class PandasClientFactory
         private Task _heartbeatTask = Task.CompletedTask;
         private Task _listenLoop = Task.CompletedTask;
         private readonly TaskCompletionSource<bool> _ackCompletionSource;
+        private readonly HashSet<TrackingPacket> _tracking = [];
 
         public PandasClientInstance(string address, int port, ILogger logger)
         {
@@ -46,7 +47,7 @@ public class PandasClientFactory
         public async Task StartListening(CancellationToken cancellationToken, Action<PandasMessage> onMessageReceived)
         {
             _heartbeatTask = HeartbeatLoop(cancellationToken);
-            _listenLoop = ReceiveLoop(onMessageReceived, cancellationToken);
+            _listenLoop = ReceiveLoop(onMessageReceived, async () => await Track(_tracking.ToArray()), cancellationToken);
             // Don't return until the ACK is completed and true
             await _ackCompletionSource.Task;
         }
@@ -74,7 +75,7 @@ public class PandasClientFactory
             }
         }
 
-        private async Task ReceiveLoop(Action<PandasMessage> onMessagesReceived, CancellationToken cancellationToken)
+        private async Task ReceiveLoop(Action<PandasMessage> onMessagesReceived, Func<Task>? onAckReceived, CancellationToken cancellationToken)
         {
             var frames = new List<PandasMessageFrame>();
             var buffer = new byte[4];
@@ -119,7 +120,8 @@ public class PandasClientFactory
                     if (!_ackCompletionSource.Task.IsCompleted && frameId == 6)
                     {
                         _logger.LogDebug("ACK received, marking as ready for listening!");
-                        _ackCompletionSource.TrySetResult(true);
+                        if (!_ackCompletionSource.TrySetResult(true) && onAckReceived != null)
+                            await onAckReceived.Invoke();
                     }
 
                     offset += 16;
@@ -139,18 +141,24 @@ public class PandasClientFactory
             public const byte Untrack = 0x0E;
         }
 
-        public async Task<bool> Track(params (byte busId, (byte first, byte second) frameId)[] messages)
+
+        public async Task<bool> Track(params TrackingPacket[] messages)
         {
+            foreach (var message in messages)
+                _tracking.Add(message);
             return await SendTrackerPayload(messages, TrackerBytes.Track);
         }
-        public async Task<bool> Untrack(params (byte busId, (byte first, byte second) frameId)[] messages)
+        public async Task<bool> Untrack(params TrackingPacket[] messages)
         {
+            foreach (var message in messages)
+                _tracking.Remove(message);
             return await SendTrackerPayload(messages, TrackerBytes.Untrack);
         }
-        private async Task<bool> SendTrackerPayload((byte busId, (byte first, byte second) frameId)[] messages,
+        private async Task<bool> SendTrackerPayload(TrackingPacket[] messages,
             byte trackerFlag)
         {
-            var trackerBytes = messages.SelectMany(m => new[] { m.busId, m.frameId.first, m.frameId.second }).ToArray();
+            // TODO chunk up payloads
+            var trackerBytes = messages.SelectMany(m => new[] { m.BusId, m.Frame.first, m.Frame.second }).ToArray();
             await _client.SendAsync(new byte[] { trackerFlag }.Concat(trackerBytes).ToArray());
             return true;
         }
@@ -165,6 +173,21 @@ public class PandasClientFactory
     }
 }
 
+        public record TrackingPacket(byte BusId, (byte first, byte second) Frame)
+        {
+            public virtual bool Equals(TrackingPacket? other)
+            {
+                if (other is null) return false;
+                if (ReferenceEquals(this, other)) return true;
+                return BusId == other.BusId && Frame.Equals(other.Frame);
+            }
+
+            public override int GetHashCode()
+            {
+                return HashCode.Combine(BusId, Frame);
+            }
+        }
+
 public record PandasMessage(params PandasMessageFrame[] Frames)
 {
     public DateTimeOffset Timestamp { get; } = DateTimeOffset.UtcNow;
@@ -174,7 +197,7 @@ public record PandasMessageFrame(uint FrameId, uint FrameLength, uint FrameBusId
 
 public interface IPandasClientInstance : IDisposable
 {
-    Task<bool> Track(params (byte busId, (byte first, byte second) frameId)[] messages);
-    Task<bool> Untrack(params (byte busId, (byte first, byte second) frameId)[] messages);
+    Task<bool> Track(params TrackingPacket[] messages);
+    Task<bool> Untrack(params TrackingPacket[] messages);
     Task AliveHandle { get; }
 }

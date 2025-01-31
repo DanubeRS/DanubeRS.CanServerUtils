@@ -56,10 +56,12 @@ async Task<int> ContinuousDownloadAndParse(ContinuousDownloadAndParseOptions opt
         var statFrame = message.Frames.SingleOrDefault(f => f.FrameId == 0x500);
         if (statFrame == null) return;
         if (!dbc.TryParseBinaryMessage(statFrame.FrameId, statFrame.FrameData, out var value, out var _)) return;
-        var busRate = value.Signals.SingleOrDefault(s => s.SignalName == "CANServer_InterfaceASpeed");
-        if (busRate == null) return;
-        const int busActivityThreshold = 1;
-        switch (busRate.Value)
+        var busARate = value.Signals.SingleOrDefault(s => s.SignalName == "CANServer_InterfaceARate");
+        var busBRate = value.Signals.SingleOrDefault(s => s.SignalName == "CANServer_InterfaceBRate");
+        if (busARate == null || busBRate == null) return;
+        var busRate = (int)busARate.Value + (int)busBRate.Value;
+        const int busActivityThreshold = 100;
+        switch (busRate)
         {
             case > busActivityThreshold:
             {
@@ -78,6 +80,10 @@ async Task<int> ContinuousDownloadAndParse(ContinuousDownloadAndParseOptions opt
             }
         }
     }, cancellationToken);
+
+    var archiveDirectory = opts.ArchivePath?.Replace("~",
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+    var (queueWait, queueFile, queueComplete) = await BuildParsePipeline(dbc, (file, ct) => ArchiveDownloadedFile(file, archiveDirectory, ct), CancellationToken.None);
     
     while (true)
     {
@@ -88,14 +94,13 @@ async Task<int> ContinuousDownloadAndParse(ContinuousDownloadAndParseOptions opt
             try
             {
                 // Only download if there are more than one files (i.e: there is actually something to get!
-                await DownloadInternal(opts, (files) => files.Count() > 1, null, internalCts.Token, forceRemove: true);
+                await DownloadInternal(opts, (files) => files.Count() > 1, queueFile, internalCts.Token, forceRemove: true);
             }
             catch (TaskCanceledException)
             {
                 // If there is a parent cancellation requested, then we must break completely...
                 if (cancellationToken.IsCancellationRequested) break;
                 // Otherwise, lets do another loop, as it's just the logging being re-enabled...
-                continue;
             }
         }
         // TODO implicitly enable logging again?
@@ -104,31 +109,48 @@ async Task<int> ContinuousDownloadAndParse(ContinuousDownloadAndParseOptions opt
         await Task.Delay(opts.Watch, cancellationToken);
     }
 
+    queueComplete();
     await client.AliveHandle;
+    await queueWait;
     return 0;
 }
 
 async Task<int> DownloadAndParse(DownloadAndParseOptions options)
 {
-    var archiveDirectory = Path.Combine(options.OutputPath.Replace("~",
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)), "ARCHIVE");
-    Directory.CreateDirectory(archiveDirectory);
-    var database = await BootstrapDatabase(options);
+        var archiveDirectory = Path.Combine(options.OutputPath.Replace("~",
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)), "ARCHIVE");
+        Directory.CreateDirectory(archiveDirectory);
+        var dbc = await BootstrapDatabase(options);
+    var (queueWait, queueFile, queueComplete) = await BuildParsePipeline(dbc, (s, ct) => ArchiveDownloadedFile(s, archiveDirectory, ct), CancellationToken.None);
+    await DownloadInternal(options, null, queueFile);
+    queueComplete();
+    await queueWait;
+    return 0;
+}
+
+Task<bool> ArchiveDownloadedFile(FileInfo file, string? archiveDirectory,
+    CancellationToken cancellationToken = default)
+{
+        if (archiveDirectory != null)
+            file.MoveTo(Path.Combine(archiveDirectory, file.Name));
+        return Task.FromResult(true);
+}
+
+async Task<(Task queueWait, Action<string> queueFile, Action onQueueComplete)> BuildParsePipeline(Database dbc, Func<FileInfo, CancellationToken, Task<bool>> onSuccessfulParse, CancellationToken cancellationToken) {
+
     var inputFile = new BufferBlock<string>();
-    var writeFile = new ActionBlock<string>(async s =>
+    var writeFile = new ActionBlock<string>(async (s) =>
     {
         var fileInfo = new FileInfo(s);
-        await ParseFileInternal(fileInfo, database, influxWriteClient);
-        fileInfo.MoveTo(Path.Combine(archiveDirectory, fileInfo.Name));
+        await ParseFileInternal(fileInfo, dbc, influxWriteClient);
+        await onSuccessfulParse(fileInfo, cancellationToken);
+
     }, new ExecutionDataflowBlockOptions()
     {
         MaxDegreeOfParallelism = 1,
     });
     inputFile.LinkTo(writeFile, new DataflowLinkOptions { PropagateCompletion = true });
-    await DownloadInternal(options, null, s => inputFile.Post(s));
-    inputFile.Complete();
-    await writeFile.Completion;
-    return 0;
+    return (writeFile.Completion, s => inputFile.Post(s), inputFile.Complete);
 }
 
 async Task<int> Download(DownloadOptions options)
