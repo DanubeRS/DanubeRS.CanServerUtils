@@ -117,7 +117,7 @@ public class PandasClientFactory
                     frames.Add(pandasMessageFrame);
 
                     // If we have an ACK packet, then the client is now ready to accept streamed frames
-                    if (!_ackCompletionSource.Task.IsCompleted && frameId == 6)
+                    if (frameId == 6)
                     {
                         _logger.LogDebug("ACK received, marking as ready for listening!");
                         if (!_ackCompletionSource.TrySetResult(true) && onAckReceived != null)
