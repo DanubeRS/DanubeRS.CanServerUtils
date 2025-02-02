@@ -1,6 +1,4 @@
-﻿// See https://aka.ms/new-console-template for more information
-
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Threading.Tasks.Dataflow;
 using CommandLine;
 using DanubeRS.CANServer.Lib.BinaryLogs;
@@ -13,7 +11,6 @@ using InfluxDB.Client;
 using InfluxDB.Client.Api.Domain;
 using InfluxDB.Client.Writes;
 using Microsoft.Extensions.Logging;
-
 using File = System.IO.File;
 using LogLevel = Microsoft.Extensions.Logging.LogLevel;
 
@@ -25,32 +22,30 @@ var loggerFactory = LoggerFactory.Create(b =>
 
 var logger = loggerFactory.CreateLogger<Program>();
 
-var influxClient = new InfluxDBClient("https://influx.internal.danubers.com",
-    "AIiYRM3WGnIq6_fERvrqT_Pydm0hB21kePpgJHmEtCn0HV3AyoX0Au3EBfONGMUs86ym4mpztjZV9pDa7j_2oA==");
-influxClient.DisableGzip();
-const string org = "danubers";
-const string bucket = "tesla";
-var influxWriteClient = influxClient.GetWriteApiAsync();
-
-var parserResult = Parser.Default.ParseArguments<DownloadOptions, ParseOptions, DownloadAndParseOptions, ContinuousDownloadAndParseOptions>(args);
+var parserResult =
+    Parser.Default
+        .ParseArguments<DownloadOptions, ParseOptions, DownloadAndParseOptions,
+            ContinuousDownloadAndParseOptions>(args);
 
 parserResult.MapResult(
     (DownloadOptions opts) => Download(opts).GetAwaiter().GetResult(),
     (ParseOptions opts) => Parse(opts).GetAwaiter().GetResult(),
     (DownloadAndParseOptions opts) => DownloadAndParse(opts).GetAwaiter().GetResult(),
     (ContinuousDownloadAndParseOptions opts) => ContinuousDownloadAndParse(opts).GetAwaiter().GetResult(),
-    errors => 1
+    _ => 1
 );
 return;
 
-async Task<int> ContinuousDownloadAndParse(ContinuousDownloadAndParseOptions opts, CancellationToken cancellationToken = default)
+async Task<int> ContinuousDownloadAndParse(ContinuousDownloadAndParseOptions opts,
+    CancellationToken cancellationToken = default)
 {
     var internalCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
     var url = new Uri(opts.Address);
     var clientFactory = new PandasClientFactory(url.Host, 1338, loggerFactory);
     var dbc = await BootstrapDatabase(opts);
+    var influxClient = InfluxWriteClientFactory(opts);
     var shouldDownload = false;
-    
+
     var client = await clientFactory.CreateAsync(message =>
     {
         var statFrame = message.Frames.SingleOrDefault(f => f.FrameId == 0x500);
@@ -61,19 +56,25 @@ async Task<int> ContinuousDownloadAndParse(ContinuousDownloadAndParseOptions opt
         if (busARate == null || busBRate == null) return;
         var busRate = (int)busARate.Value + (int)busBRate.Value;
         const int busActivityThreshold = 100;
+        logger.LogDebug("Bus rate is {Rate}. Threshold is {Threshold}", busRate, busActivityThreshold);
         switch (busRate)
         {
-            case > busActivityThreshold:
+            case > busActivityThreshold when shouldDownload || !internalCts.IsCancellationRequested:
             {
                 // Don't download, as there is bus activity!
+                logger.LogInformation(
+                    "Bus has woken up ({BusRate}), cancel any active downloads and wait until its quiet again.",
+                    busRate);
                 shouldDownload = false;
                 // Cancel any active downloading
                 if (!internalCts.IsCancellationRequested)
                     internalCts.Cancel();
                 break;
             }
-            case < busActivityThreshold:
+            case < busActivityThreshold when !shouldDownload:
             {
+                logger.LogInformation(
+                    "Bus activity ({BusRate}) is lower than threshold, start downloading and parsing files!", busRate);
                 shouldDownload = true;
                 if (internalCts.IsCancellationRequested) internalCts.TryReset();
                 break;
@@ -83,28 +84,31 @@ async Task<int> ContinuousDownloadAndParse(ContinuousDownloadAndParseOptions opt
 
     var archiveDirectory = opts.ArchivePath?.Replace("~",
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
-    var (queueWait, queueFile, queueComplete) = await BuildParsePipeline(dbc, (file, ct) => ArchiveDownloadedFile(file, archiveDirectory, ct), CancellationToken.None);
-    
+    var (queueWait, queueFile, queueComplete) = await BuildParsePipeline(dbc,
+        (file, ct) => ArchiveDownloadedFile(file, archiveDirectory, ct), CancellationToken.None, influxClient, opts, opts);
+
     while (true)
     {
         if (cancellationToken.IsCancellationRequested) break;
         // There is no active logging, so lets go ahead and download!
         if (shouldDownload)
         {
+            logger.LogInformation("Download is ready; warming up...");
             try
             {
                 // Only download if there are more than one files (i.e: there is actually something to get!
-                await DownloadInternal(opts, (files) => files.Count() > 1, queueFile, internalCts.Token, forceRemove: true);
+                await DownloadInternal(opts, (files) => files.Count() > 1, queueFile, internalCts.Token,
+                    forceRemove: true);
             }
             catch (TaskCanceledException)
             {
                 // If there is a parent cancellation requested, then we must break completely...
                 if (cancellationToken.IsCancellationRequested) break;
                 // Otherwise, lets do another loop, as it's just the logging being re-enabled...
+                logger.LogInformation("An active download was cancelled due to the bus waking up");
             }
         }
-        // TODO implicitly enable logging again?
-        
+
         internalCts.TryReset();
         await Task.Delay(opts.Watch, cancellationToken);
     }
@@ -117,11 +121,13 @@ async Task<int> ContinuousDownloadAndParse(ContinuousDownloadAndParseOptions opt
 
 async Task<int> DownloadAndParse(DownloadAndParseOptions options)
 {
-        var archiveDirectory = Path.Combine(options.OutputPath.Replace("~",
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)), "ARCHIVE");
-        Directory.CreateDirectory(archiveDirectory);
-        var dbc = await BootstrapDatabase(options);
-    var (queueWait, queueFile, queueComplete) = await BuildParsePipeline(dbc, (s, ct) => ArchiveDownloadedFile(s, archiveDirectory, ct), CancellationToken.None);
+    var influxClient = InfluxWriteClientFactory(options);
+    var archiveDirectory = Path.Combine(options.OutputPath.Replace("~",
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)), "ARCHIVE");
+    Directory.CreateDirectory(archiveDirectory);
+    var dbc = await BootstrapDatabase(options);
+    var (queueWait, queueFile, queueComplete) = await BuildParsePipeline(dbc,
+        (s, ct) => ArchiveDownloadedFile(s, archiveDirectory, ct), CancellationToken.None, influxClient, options, options);
     await DownloadInternal(options, null, queueFile);
     queueComplete();
     await queueWait;
@@ -131,21 +137,22 @@ async Task<int> DownloadAndParse(DownloadAndParseOptions options)
 Task<bool> ArchiveDownloadedFile(FileInfo file, string? archiveDirectory,
     CancellationToken cancellationToken = default)
 {
-        if (archiveDirectory != null)
-            file.MoveTo(Path.Combine(archiveDirectory, file.Name));
-        return Task.FromResult(true);
+    if (archiveDirectory != null)
+        file.MoveTo(Path.Combine(archiveDirectory, file.Name));
+    return Task.FromResult(true);
 }
 
-async Task<(Task queueWait, Action<string> queueFile, Action onQueueComplete)> BuildParsePipeline(Database dbc, Func<FileInfo, CancellationToken, Task<bool>> onSuccessfulParse, CancellationToken cancellationToken) {
-
+async Task<(Task queueWait, Action<string> queueFile, Action onQueueComplete)> BuildParsePipeline(Database dbc,
+    Func<FileInfo, CancellationToken, Task<bool>> onSuccessfulParse, CancellationToken cancellationToken,
+    WriteApiAsync influxClient, IUploadOptions options, IParseOptions parseOptions)
+{
     var inputFile = new BufferBlock<string>();
     var writeFile = new ActionBlock<string>(async (s) =>
     {
         var fileInfo = new FileInfo(s);
-        await ParseFileInternal(fileInfo, dbc, influxWriteClient);
+        await ParseFileInternal(fileInfo, dbc, influxClient, options, parseOptions);
         await onSuccessfulParse(fileInfo, cancellationToken);
-
-    }, new ExecutionDataflowBlockOptions()
+    }, new ExecutionDataflowBlockOptions
     {
         MaxDegreeOfParallelism = 1,
     });
@@ -163,13 +170,15 @@ async Task<int> DownloadInternal(IDownloadOptions downloadOptions,
     CancellationToken cancellationToken = default, bool forceRemove = false)
 {
     var downloader = new Downloader(downloadOptions.Address, loggerFactory.CreateLogger<Downloader>());
-    await downloader.DownloadAllFiles(LogFileType.Interval, downloadOptions.Remove || forceRemove, true, downloadOptions.OutputPath,
+    await downloader.DownloadAllFiles(LogFileType.Interval, downloadOptions.Remove || forceRemove, true,
+        downloadOptions.OutputPath,
         cancellationToken, onFileDownloaded, shouldRunTest);
     return 0;
 }
 
 async Task<int> Parse(ParseOptions options)
 {
+    var influxClient = InfluxWriteClientFactory(options);
     while (true)
     {
         var database = await BootstrapDatabase(options);
@@ -185,7 +194,7 @@ async Task<int> Parse(ParseOptions options)
 
         foreach (var file in files)
         {
-            await ParseFileInternal(file, database, influxWriteClient);
+            await ParseFileInternal(file, database, influxClient, options, options);
             if (archiveDirectory != null)
                 file.MoveTo(Path.Combine(archiveDirectory, Path.Combine(archiveDirectory, file.Name)));
         }
@@ -214,7 +223,7 @@ async Task<Database> BootstrapDatabase(IParseOptions parseOptions)
 }
 
 async Task ParseFileInternal(FileInfo fileInfo,
-    Database database, WriteApiAsync writeApiAsync)
+    Database database, WriteApiAsync writeApiAsync, IUploadOptions uploadOptions, IParseOptions parseOptions)
 {
     var stopWatch = new Stopwatch();
     var pointData = new List<PointData>();
@@ -240,15 +249,15 @@ async Task ParseFileInternal(FileInfo fileInfo,
         logger.LogDebug("Decoding frame {FrameId:x8} @ {FrameTime}", frame.FrameId, frame.FrameTime);
         if (database.TryParseBinaryMessage(frame.FrameId, frame.FramePayload, out var value, out var defn))
         {
-            // if (frame.FrameId != 79) continue;
-
+            if (!parseOptions.Signals?.Contains(frame.FrameId) ?? false) continue;
             logger.LogDebug("Successfully Parsed message #{MessageNumber} @ {MessageTime} (ID:{FrameId})", frames,
                 frame.FrameTime, frame.FrameId);
             logger.LogTrace("{MessageId} {MessageName} {Signals}", value.MessageId, value.MessageName,
                 value.Signals.Select(s => $"{s.SignalName}"));
 
             pointData.AddRange(value.Signals
-                .Select(signal => new { signal, signalDfn = defn.Signals.First(s => s.Signal.Name == signal.SignalName) })
+                .Select(signal => new
+                    { signal, signalDfn = defn.Signals.First(s => s.Signal.Name == signal.SignalName) })
                 .Select(t => PointData.Measurement("CAN")
                     .Tag("_unit", t.signalDfn.Signal.Unit.TrimStart('"').TrimEnd('"'))
                     .Field(t.signal.SignalName, t.signal.Value)
@@ -261,7 +270,7 @@ async Task ParseFileInternal(FileInfo fileInfo,
         if (pointData.Count > 5_000)
         {
             var rqStop = Stopwatch.StartNew();
-            await writeApiAsync.WritePointsAsync(pointData, bucket, org);
+            await writeApiAsync.WritePointsAsync(pointData, uploadOptions.InfluxBucket, uploadOptions.InfluxOrg);
             rqStop.Stop();
             logger.LogDebug("Processed {points} points ({pointsSec}/sec) (RQ: {RequestSec})", pointData.Count,
                 (pointData.Count / pointsStopwatch.Elapsed.TotalSeconds), rqStop.Elapsed.TotalSeconds);
@@ -298,4 +307,12 @@ async Task ParseFileInternal(FileInfo fileInfo,
     logger.LogInformation("Processed {points} points in {elapsed}({pointsSec}/sec)", points,
         stopWatch.Elapsed.TotalSeconds,
         (points / stopWatch.Elapsed.TotalSeconds));
+}
+
+WriteApiAsync InfluxWriteClientFactory(IUploadOptions opts)
+{
+    var influxClient = new InfluxDBClient(opts.InfluxAddress, opts.InfluxToken);
+    if (!opts.InfluxCompress)
+        influxClient.DisableGzip();
+    return influxClient.GetWriteApiAsync();
 }

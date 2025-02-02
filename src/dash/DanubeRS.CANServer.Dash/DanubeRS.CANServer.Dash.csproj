@@ -1,37 +1,37 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <LangVersion>latest</LangVersion>
-    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-  </PropertyGroup>
-  
-  <ItemGroup>
-    <AvaloniaResource Include="Assets\**" />
-  </ItemGroup>
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Avalonia" />
-    <PackageReference Include="Avalonia.Skia" />
-    <PackageReference Include="Avalonia.Themes.Fluent" />
-    <PackageReference Include="Avalonia.Fonts.Inter" />
-    <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
-    <PackageReference Include="Avalonia.Diagnostics">
-      <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
-      <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="CommunityToolkit.Mvvm" />
-    <PackageReference Include="ReactiveUI" />
-  </ItemGroup>
+    <ItemGroup>
+        <AvaloniaResource Include="Assets\**"/>
+    </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\lib\DanubeRS.CANServer.Lib\DanubeRS.CANServer.Lib.csproj" />
-    <ProjectReference Include="..\..\lib\DanubeRS.DBCParser\DanubeRS.DBCParser.csproj" />
-    <ProjectReference Include="..\DanubeRS.CANServer.UI.SkiaElements\DanubeRS.CANServer.UI.SkiaElements.csproj" />
-  </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Avalonia"/>
+        <PackageReference Include="Avalonia.Skia"/>
+        <PackageReference Include="Avalonia.Themes.Fluent"/>
+        <PackageReference Include="Avalonia.Fonts.Inter"/>
+        <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
+        <PackageReference Include="Avalonia.Diagnostics">
+            <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
+            <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="CommunityToolkit.Mvvm"/>
+        <PackageReference Include="ReactiveUI"/>
+    </ItemGroup>
 
-  <ItemGroup>
-    <EmbeddedResource Include="DBC\CANServer.dbc" />
-    <EmbeddedResource Include="DBC\Model3CAN.dbc" />
-  </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\lib\DanubeRS.CANServer.Lib\DanubeRS.CANServer.Lib.csproj"/>
+        <ProjectReference Include="..\..\lib\DanubeRS.DBCParser\DanubeRS.DBCParser.csproj"/>
+        <ProjectReference Include="..\DanubeRS.CANServer.UI.SkiaElements\DanubeRS.CANServer.UI.SkiaElements.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <EmbeddedResource Include="DBC\CANServer.dbc"/>
+        <EmbeddedResource Include="DBC\Model3CAN.dbc"/>
+    </ItemGroup>
 </Project>

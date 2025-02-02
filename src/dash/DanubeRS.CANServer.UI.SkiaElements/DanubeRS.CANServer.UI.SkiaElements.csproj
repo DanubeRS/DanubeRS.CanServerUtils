@@ -8,7 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="SkiaSharp" />
+        <PackageReference Include="SkiaSharp"/>
     </ItemGroup>
 
 </Project>

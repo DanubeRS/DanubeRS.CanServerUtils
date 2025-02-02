@@ -47,7 +47,8 @@ public class PandasClientFactory
         public async Task StartListening(CancellationToken cancellationToken, Action<PandasMessage> onMessageReceived)
         {
             _heartbeatTask = HeartbeatLoop(cancellationToken);
-            _listenLoop = ReceiveLoop(onMessageReceived, async () => await Track(_tracking.ToArray()), cancellationToken);
+            _listenLoop = ReceiveLoop(onMessageReceived, async () => await Track(_tracking.ToArray()),
+                cancellationToken);
             // Don't return until the ACK is completed and true
             await _ackCompletionSource.Task;
         }
@@ -71,11 +72,13 @@ public class PandasClientFactory
                 {
                     _logger.LogWarning(e, "Failed to send heartbeat");
                 }
+
                 await Task.Delay(5000, cancellationToken);
             }
         }
 
-        private async Task ReceiveLoop(Action<PandasMessage> onMessagesReceived, Func<Task>? onAckReceived, CancellationToken cancellationToken)
+        private async Task ReceiveLoop(Action<PandasMessage> onMessagesReceived, Func<Task>? onAckReceived,
+            CancellationToken cancellationToken)
         {
             var frames = new List<PandasMessageFrame>();
             var buffer = new byte[4];
@@ -92,6 +95,7 @@ public class PandasClientFactory
                     _logger.LogWarning(e, "Failed to receive messages");
                     continue;
                 }
+
                 _logger.Log(LogLevel.Trace, "Result: {Bytes}", BytesToString(result.Buffer));
                 while (offset < result.Buffer.Length)
                 {
@@ -148,12 +152,14 @@ public class PandasClientFactory
                 _tracking.Add(message);
             return await SendTrackerPayload(messages, TrackerBytes.Track);
         }
+
         public async Task<bool> Untrack(params TrackingPacket[] messages)
         {
             foreach (var message in messages)
                 _tracking.Remove(message);
             return await SendTrackerPayload(messages, TrackerBytes.Untrack);
         }
+
         private async Task<bool> SendTrackerPayload(TrackingPacket[] messages,
             byte trackerFlag)
         {
@@ -173,20 +179,20 @@ public class PandasClientFactory
     }
 }
 
-        public record TrackingPacket(byte BusId, (byte first, byte second) Frame)
-        {
-            public virtual bool Equals(TrackingPacket? other)
-            {
-                if (other is null) return false;
-                if (ReferenceEquals(this, other)) return true;
-                return BusId == other.BusId && Frame.Equals(other.Frame);
-            }
+public record TrackingPacket(byte BusId, (byte first, byte second) Frame)
+{
+    public virtual bool Equals(TrackingPacket? other)
+    {
+        if (other is null) return false;
+        if (ReferenceEquals(this, other)) return true;
+        return BusId == other.BusId && Frame.Equals(other.Frame);
+    }
 
-            public override int GetHashCode()
-            {
-                return HashCode.Combine(BusId, Frame);
-            }
-        }
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(BusId, Frame);
+    }
+}
 
 public record PandasMessage(params PandasMessageFrame[] Frames)
 {

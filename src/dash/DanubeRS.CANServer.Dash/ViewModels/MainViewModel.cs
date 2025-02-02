@@ -21,29 +21,33 @@ public partial class MainViewModel : ReactiveObject
     {
         Listen().ConfigureAwait(false);
     }
-    
+
     private decimal _batteryPower = 0;
+
     public decimal BatteryPower
     {
         get => _batteryPower;
         set => this.RaiseAndSetIfChanged(ref _batteryPower, value);
     }
-    
+
     private decimal _batteryTemp = 0;
+
     public decimal BatteryTemp
     {
         get => _batteryTemp;
         set => this.RaiseAndSetIfChanged(ref _batteryTemp, value);
     }
-    
+
     private decimal _batterySoC = 0;
+
     public decimal BatterySoC
     {
         get => _batterySoC;
         set => this.RaiseAndSetIfChanged(ref _batterySoC, value);
     }
-    
+
     private uint _interfaceRate = 0;
+
     public uint InterfaceRate
     {
         get => _interfaceRate;
@@ -66,8 +70,8 @@ public partial class MainViewModel : ReactiveObject
         var clientFactory = new PandasClientFactory(url, 1338, NullLoggerFactory.Instance);
         var client = await clientFactory.CreateAsync((message) => HandlePandaMessages(message, dbc));
         await client.Track(
-            new TrackingPacket(0x01, (0x01, 0x32)), 
-            new TrackingPacket(0x01, (0x03, 0x32)), 
+            new TrackingPacket(0x01, (0x01, 0x32)),
+            new TrackingPacket(0x01, (0x03, 0x32)),
             new TrackingPacket(0x01, (0x02, 0x92)));
         await client.AliveHandle;
     }
@@ -92,7 +96,8 @@ public partial class MainViewModel : ReactiveObject
                 }
                 case 0x332:
                 {
-                    var battTemp = (decimal?)messageValue.Signals.FirstOrDefault(s => s.SignalName == "BattBrickTempMax332")?.Value;
+                    var battTemp = (decimal?)messageValue.Signals
+                        .FirstOrDefault(s => s.SignalName == "BattBrickTempMax332")?.Value;
                     if (battTemp == null) continue;
                     if (battTemp != BatteryTemp)
                         Dispatcher.UIThread.Post(() => BatteryTemp = battTemp.Value);
@@ -106,9 +111,10 @@ public partial class MainViewModel : ReactiveObject
                         Dispatcher.UIThread.Post(() => BatterySoC = (decimal)battSoC.Value);
                     break;
                 }
-                case 0x502:
+                case 0x500:
                 {
-                    var ifRate = (uint?)messageValue.Signals.FirstOrDefault(s => s.SignalName == "CANServer_LoggingRate")?.Value;
+                    var ifRate = (uint?)messageValue.Signals
+                        .FirstOrDefault(s => s.SignalName == "CANServer_InterfaceARate")?.Value;
                     if (ifRate == null) continue;
                     if (ifRate != InterfaceRate)
                         Dispatcher.UIThread.Post(() => InterfaceRate = ifRate.Value);

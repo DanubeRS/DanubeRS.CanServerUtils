@@ -9,5 +9,5 @@
         Icon="/Assets/avalonia-logo.ico"
         Background="Black"
         Title="DanubeRS.CANServer.Dash">
-        <views:MainView />
+    <views:MainView />
 </Window>

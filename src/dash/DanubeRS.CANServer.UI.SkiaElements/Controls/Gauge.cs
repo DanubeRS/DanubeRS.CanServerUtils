@@ -15,7 +15,8 @@ public class Gauge : IRenderableControl
     // Define the sweep angle for each segment of the gauge
     private const float SweepAngle = 67.5f;
 
-    public Gauge(string? name, decimal value, float width, float height, decimal minValue, decimal maxValue, int precision = 0)
+    public Gauge(string? name, decimal value, float width, float height, decimal minValue, decimal maxValue,
+        int precision = 0)
     {
         _name = name;
         _value = decimal.Round(value, precision, MidpointRounding.ToPositiveInfinity);
@@ -25,23 +26,24 @@ public class Gauge : IRenderableControl
         _maxValue = (float)maxValue;
         _precision = precision;
     }
+
     public void Render(SKCanvas canvas)
     {
         var size = Math.Min(_width, _height);
         var centerX = _width / 2;
         var centerY = _height / 2;
         var scale = size / 210f;
-        
+
         canvas.Translate(centerX, centerY);
         canvas.Scale(scale);
-        
+
         // DrawBackground(canvas, size);
         DrawGauge(canvas);
         DrawNeedle(canvas, (float)_value);
         DrawNeedleScrew(canvas);
         DrawValueText(canvas);
     }
-    
+
     /// <summary>
     ///     Draws the background of the gauge.
     /// </summary>
@@ -58,7 +60,7 @@ public class Gauge : IRenderableControl
                 Color = SKColors.Blue,
             });
     }
-    
+
     /// <summary>
     ///     Draws the gauge on the canvas.
     /// </summary>
@@ -102,7 +104,7 @@ public class Gauge : IRenderableControl
             StrokeWidth = 10
         });
     }
-    
+
     /// <summary>
     ///     Draws the needle of the gauge.
     /// </summary>
@@ -147,7 +149,7 @@ public class Gauge : IRenderableControl
             Color = SKColors.Gray
         });
     }
-    
+
     /// <summary>
     ///     Draws the value text and unit text on the gauge.
     /// </summary>
@@ -167,7 +169,7 @@ public class Gauge : IRenderableControl
         textPaint.TextSize = 16;
         DrawUnitText(canvas, _value.ToString("N0"), 75, textPaint);
     }
-    
+
     /// <summary>
     ///     Draws a unit text on the canvas.
     /// </summary>
@@ -185,5 +187,4 @@ public class Gauge : IRenderableControl
         paint.MeasureText(text, ref textBounds);
         canvas.DrawText(text, -textBounds.MidX, y - textBounds.Height, paint);
     }
-    
 }

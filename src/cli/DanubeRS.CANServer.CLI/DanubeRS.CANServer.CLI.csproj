@@ -24,8 +24,8 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\lib\DanubeRS.CANServer.Lib\DanubeRS.CANServer.Lib.csproj" />
-      <ProjectReference Include="..\..\lib\DanubeRS.DBCParser\DanubeRS.DBCParser.csproj" />
+        <ProjectReference Include="..\..\lib\DanubeRS.CANServer.Lib\DanubeRS.CANServer.Lib.csproj"/>
+        <ProjectReference Include="..\..\lib\DanubeRS.DBCParser\DanubeRS.DBCParser.csproj"/>
     </ItemGroup>
 
 </Project>

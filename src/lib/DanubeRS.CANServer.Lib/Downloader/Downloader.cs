@@ -79,7 +79,8 @@ public class Downloader(string url, ILogger<Downloader> logger)
     }
 
     private async Task DownloadAllFilesInternal(LogFileClient client, bool deleteOnDownload,
-        string? outputPath, CancellationToken cancellationToken = default, Action<string>? onDownloaded = null, IEnumerable<LogFileRecord>? allFiles = null)
+        string? outputPath, CancellationToken cancellationToken = default, Action<string>? onDownloaded = null,
+        IEnumerable<LogFileRecord>? allFiles = null)
     {
         var downloadDate = DateTimeOffset.UtcNow;
         allFiles ??= await GetStoredFiles(client);
@@ -131,7 +132,8 @@ public class Downloader(string url, ILogger<Downloader> logger)
                 MaxRetryAttempts = 3,
                 OnRetry = ctx =>
                 {
-                    logger.LogWarning("Returned file was not the expected size. Downloading again (attempt {Attempts})...",
+                    logger.LogWarning(
+                        "Returned file was not the expected size. Downloading again (attempt {Attempts})...",
                         ctx.AttemptNumber);
                     return ValueTask.CompletedTask;
                 },
@@ -183,10 +185,12 @@ public class Downloader(string url, ILogger<Downloader> logger)
                     }
                 }
             }
+            catch (Exception e) when (e is OperationCanceledException or TaskCanceledException)
+            {
+            }
             catch (Exception e)
             {
                 logger.LogError(e, "Failed to download log file");
-                continue;
             }
         }
     }

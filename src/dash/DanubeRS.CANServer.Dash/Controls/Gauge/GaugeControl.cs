@@ -27,13 +27,17 @@ public class Gauge : Control
 
     public static readonly StyledProperty<decimal> ValueProperty =
         AvaloniaProperty.Register<Gauge, decimal>(nameof(Value), 0);
+
     public static readonly StyledProperty<decimal> MinValueProperty =
         AvaloniaProperty.Register<Gauge, decimal>(nameof(MinValue), 0);
-    public static readonly StyledProperty<decimal> MaxValueProperty = 
+
+    public static readonly StyledProperty<decimal> MaxValueProperty =
         AvaloniaProperty.Register<Gauge, decimal>(nameof(MaxValue), 100);
-    public static readonly StyledProperty<string?> GuageNameProperty = 
+
+    public static readonly StyledProperty<string?> GuageNameProperty =
         AvaloniaProperty.Register<Gauge, string?>(nameof(GuageName), null);
-    public static readonly StyledProperty<int> PrecisionProperty = 
+
+    public static readonly StyledProperty<int> PrecisionProperty =
         AvaloniaProperty.Register<Gauge, int>(nameof(Precision), 0);
 
     public string? GuageName
@@ -41,6 +45,7 @@ public class Gauge : Control
         get => GetValue(GuageNameProperty);
         set => SetValue(GuageNameProperty, value);
     }
+
     public decimal Value
     {
         get => GetValue(ValueProperty);
@@ -75,7 +80,8 @@ public class Gauge : Control
         private readonly decimal _maxValue;
         private readonly int _precision;
 
-        public GaugeDrawOp(Rect bounds, GlyphRun noSkia, string? name, decimal? value, decimal minValue, decimal maxValue, int precision = 0)
+        public GaugeDrawOp(Rect bounds, GlyphRun noSkia, string? name, decimal? value, decimal minValue,
+            decimal maxValue, int precision = 0)
         {
             _name = name;
             _value = value;
@@ -85,6 +91,7 @@ public class Gauge : Control
             _maxValue = maxValue;
             _precision = precision;
         }
+
         public void Dispose()
         {
             // No-op
@@ -93,7 +100,7 @@ public class Gauge : Control
         public Rect Bounds { get; }
         public bool HitTest(Point p) => false;
         public bool Equals(ICustomDrawOperation other) => false;
-        
+
         public void Render(ImmediateDrawingContext context)
         {
             var leaseFeature = context.TryGetFeature<ISkiaSharpApiLeaseFeature>();
@@ -107,15 +114,18 @@ public class Gauge : Control
             var canvas = lease.SkCanvas;
             canvas.Save();
 
-            var render = new CANServerDask.SkiaElements.Controls.Gauge(_name, Math.Min(Math.Max(_value.GetValueOrDefault(0), _minValue), _maxValue), (float)Bounds.Width, (float)Bounds.Height, _minValue, _maxValue, _precision);
+            var render = new CANServerDask.SkiaElements.Controls.Gauge(_name,
+                Math.Min(Math.Max(_value.GetValueOrDefault(0), _minValue), _maxValue), (float)Bounds.Width,
+                (float)Bounds.Height, _minValue, _maxValue, _precision);
             render.Render(canvas);
             canvas.Restore();
         }
     }
-    
+
     public override void Render(DrawingContext context)
     {
-        context.Custom(new GaugeDrawOp(new Rect(0, 0, Bounds.Width, Bounds.Height), _noSkia, GuageName, Value, MinValue, MaxValue));
+        context.Custom(new GaugeDrawOp(new Rect(0, 0, Bounds.Width, Bounds.Height), _noSkia, GuageName, Value, MinValue,
+            MaxValue));
         Dispatcher.UIThread.InvokeAsync(InvalidateVisual, DispatcherPriority.Background);
     }
 }
