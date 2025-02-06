@@ -20,7 +20,7 @@
                      GuageName="Battery (W)" Precision="0" />
         <gauge:Gauge Grid.Column="1" Grid.Row="0" Value="{Binding BatteryTemp}" MinValue="0" MaxValue="60"
                      GuageName="Battery (c)" Precision="1" />
-        <verticalGauge:VerticalGaugeControl Grid.Row="0" Grid.Column="2" Grid.RowSpan="2"></verticalGauge:VerticalGaugeControl>
+        <verticalGauge:VerticalGauge Grid.Row="0" Grid.Column="2" Grid.RowSpan="2" MinValue="-70" MaxValue="310" Value="{Binding BatteryPower}"></verticalGauge:VerticalGauge>
         <gauge:Gauge Grid.Column="0" Grid.Row="1" Value="{Binding BatterySoC}" MinValue="0" MaxValue="100"
                      GuageName="Battery (%)" Precision="1" />
         <gauge:Gauge Grid.Column="1" Grid.Row="1" Value="{Binding InterfaceRate}" MinValue="0" MaxValue="3000"

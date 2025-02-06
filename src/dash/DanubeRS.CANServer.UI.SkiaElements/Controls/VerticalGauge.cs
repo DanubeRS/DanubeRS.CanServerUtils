@@ -8,29 +8,30 @@ public class VerticalGauge : IRenderableControl
     private readonly float _width;
     private readonly float _height;
     private readonly float _maxValue;
+    private readonly float _value;
     private readonly float _minValue;
 
-    public VerticalGauge(float width, float height, float maxValue, float minValue)
+    public VerticalGauge(float width, float height, float minValue, float maxValue, float value)
     {
         _width = width;
         _height = height;
         _maxValue = maxValue;
+        _value = value;
         _minValue = minValue;
     }
     public void Render(SKCanvas canvas)
     {
-        const int value = -40;
         DrawBackground(canvas);
         DrawValueMarkers(canvas);
-        DrawValueBar(canvas, value);
-        DrawValueIndicatorBox(canvas, value);
+        DrawValueBar(canvas, _value);
+        DrawValueIndicatorBox(canvas, _value);
     }
 
-    public void DrawValueIndicatorBox(SKCanvas canvas, int value)
+    public void DrawValueIndicatorBox(SKCanvas canvas, float value)
     {
         var halfHeight = (_height - 8) / 2;
         var valueHeightInPx = halfHeight / Math.Abs(value < 0 ? _minValue : _maxValue) * value;
-        var rect = new SKRect(10, halfHeight - valueHeightInPx - 18, 84, halfHeight - valueHeightInPx + 18);
+        var rect = new SKRect(24, halfHeight - valueHeightInPx - 18, 84, halfHeight - valueHeightInPx + 18);
         canvas.DrawRect(rect, new SKPaint()
         {
             Style = SKPaintStyle.Fill,
@@ -41,6 +42,17 @@ public class VerticalGauge : IRenderableControl
             Style = SKPaintStyle.Stroke,
             StrokeWidth = 2,
             Color = SKColors.LightGray,
+        });
+        var indicatorPath = new SKPath();
+        indicatorPath.MoveTo(rect.Left, rect.Top);
+        indicatorPath.LineTo(14, halfHeight - valueHeightInPx);
+        indicatorPath.LineTo(rect.Left, rect.Bottom);
+        indicatorPath.Close();
+        canvas.DrawPath(indicatorPath, new SKPaint()
+        {
+            Style = SKPaintStyle.Fill,
+            StrokeWidth = 2,
+            Color = SKColors.LightGray
         });
         
         var textPaint = new SKPaint()
@@ -61,8 +73,8 @@ public class VerticalGauge : IRenderableControl
     {
         var halfHeight = (_height - 8) / 2;
         var valueHeightInPx = halfHeight / Math.Abs(value < 0 ? _minValue : _maxValue) * value;
-        var rect = new SKRect(4, halfHeight - valueHeightInPx, 10, halfHeight);
-        canvas.DrawRect(rect, new SKPaint()
+        var rect = new SKRect(4, halfHeight - valueHeightInPx, 14, halfHeight);
+        canvas.DrawRect(rect, new SKPaint
         {
             Style = SKPaintStyle.Fill,
             Color = value < 0 ? SKColors.LimeGreen : SKColors.Blue

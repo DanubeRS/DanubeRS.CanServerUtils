@@ -10,18 +10,45 @@ using Avalonia.Threading;
 
 namespace DanubeRS.CANServer.Dash.Controls.VerticalGauge;
 
-public class VerticalGaugeControl : Control
+public class VerticalGauge : Control
 {
     private readonly GlyphRun _noSkia;
-    public VerticalGaugeControl()
+    public VerticalGauge()
     {
         ClipToBounds = true;
         var text = "Current rendering API is not Skia";
         var glyphs = text.Select(ch => Typeface.Default.GlyphTypeface.GetGlyph(ch)).ToArray();
         _noSkia = new GlyphRun(Typeface.Default.GlyphTypeface, 12, text.AsMemory(), glyphs); 
     }
+    
+    public static readonly StyledProperty<decimal> ValueProperty =
+        AvaloniaProperty.Register<VerticalGauge, decimal>(nameof(Value), 0);
 
-    private class VerticalGaugeDrawOp(Rect bounds, GlyphRun noSkia) : ICustomDrawOperation
+    public static readonly StyledProperty<decimal> MinValueProperty =
+        AvaloniaProperty.Register<VerticalGauge, decimal>(nameof(MinValue), 0);
+
+    public static readonly StyledProperty<decimal> MaxValueProperty =
+        AvaloniaProperty.Register<VerticalGauge, decimal>(nameof(MaxValue), 100);
+    
+    public decimal Value
+    {
+        get => GetValue(ValueProperty);
+        set => SetValue(ValueProperty, value);
+    }
+
+    public decimal MinValue
+    {
+        get => GetValue(MinValueProperty);
+        set => SetValue(MinValueProperty, value);
+    }
+
+    public decimal MaxValue
+    {
+        get => GetValue(MaxValueProperty);
+        set => SetValue(MaxValueProperty, value);
+    }
+
+    private class VerticalGaugeDrawOp(Rect bounds, GlyphRun noSkia, decimal minValue, decimal maxValue, decimal value) : ICustomDrawOperation
     {
         public void Dispose()
         {
@@ -43,7 +70,8 @@ public class VerticalGaugeControl : Control
             var canvas = lease.SkCanvas;
             canvas.Save();
 
-            var render = new CANServerDask.SkiaElements.Controls.VerticalGauge((float)bounds.Width, (float)bounds.Height, 310, -70);
+            var render = new CANServerDask.SkiaElements.Controls.VerticalGauge((float)bounds.Width,
+                (float)bounds.Height, (float)minValue, (float)maxValue, (float)value);
             render.Render(canvas);
             canvas.Restore();
         }
@@ -53,7 +81,7 @@ public class VerticalGaugeControl : Control
     
     public override void Render(DrawingContext context)
     {
-        context.Custom(new VerticalGaugeDrawOp(new Rect(0, 0, Bounds.Width, Bounds.Height), _noSkia));
+        context.Custom(new VerticalGaugeDrawOp(new Rect(0, 0, Bounds.Width, Bounds.Height), _noSkia, MinValue, MaxValue, Value / 1000));
         Dispatcher.UIThread.InvokeAsync(InvalidateVisual, DispatcherPriority.Background);
     }
 }
