@@ -45,6 +45,7 @@ async Task<int> ContinuousDownloadAndParse(ContinuousDownloadAndParseOptions opt
     var dbc = await BootstrapDatabase(opts);
     var influxClient = InfluxWriteClientFactory(opts);
     var shouldDownload = false;
+    const int fileCountThreshold = 1;
 
     var client = await clientFactory.CreateAsync(message =>
     {
@@ -55,7 +56,7 @@ async Task<int> ContinuousDownloadAndParse(ContinuousDownloadAndParseOptions opt
         var busBRate = value.Signals.SingleOrDefault(s => s.SignalName == "CANServer_InterfaceBRate");
         if (busARate == null || busBRate == null) return;
         var busRate = (int)busARate.Value + (int)busBRate.Value;
-        const int busActivityThreshold = 100;
+        const int busActivityThreshold = 0;
         logger.LogDebug("Bus rate is {Rate}. Threshold is {Threshold}", busRate, busActivityThreshold);
         switch (busRate)
         {
@@ -71,7 +72,7 @@ async Task<int> ContinuousDownloadAndParse(ContinuousDownloadAndParseOptions opt
                     internalCts.Cancel();
                 break;
             }
-            case < busActivityThreshold when !shouldDownload:
+            case <= busActivityThreshold when !shouldDownload:
             {
                 logger.LogInformation(
                     "Bus activity ({BusRate}) is lower than threshold, start downloading and parsing files!", busRate);
@@ -93,11 +94,22 @@ async Task<int> ContinuousDownloadAndParse(ContinuousDownloadAndParseOptions opt
         // There is no active logging, so lets go ahead and download!
         if (shouldDownload)
         {
+            // TODO do a download file threshold check here?
             logger.LogInformation("Download is ready; warming up...");
             try
             {
                 // Only download if there are more than one files (i.e: there is actually something to get!
-                await DownloadInternal(opts, (files) => files.Count() > 1, queueFile, internalCts.Token,
+                await DownloadInternal(opts, (files) =>
+                    {
+                        var fileCount = files?.Count();
+                        if (fileCount <= fileCountThreshold)
+                        {
+                            logger.LogInformation("{FileCount} files are ready to download, but this is below the threshold ({FileCountThreshold})", fileCount, fileCountThreshold);
+                            return false;
+                        }
+                        logger.LogInformation("{FileCount} files are ready to download; which is above the threshold ({FileCountThreshold}) running routine:", fileCount, fileCountThreshold);
+                        return true;
+                    }, queueFile, internalCts.Token,
                     forceRemove: true);
             }
             catch (TaskCanceledException)
@@ -110,7 +122,8 @@ async Task<int> ContinuousDownloadAndParse(ContinuousDownloadAndParseOptions opt
         }
 
         internalCts.TryReset();
-        await Task.Delay(opts.Watch, cancellationToken);
+        logger.LogInformation("Download loop successfully ran; waiting {Watch}s before next loop", opts.Watch            );
+        await Task.Delay(TimeSpan.FromSeconds(opts.Watch), cancellationToken);
     }
 
     queueComplete();
@@ -249,7 +262,7 @@ async Task ParseFileInternal(FileInfo fileInfo,
         logger.LogDebug("Decoding frame {FrameId:x8} @ {FrameTime}", frame.FrameId, frame.FrameTime);
         if (database.TryParseBinaryMessage(frame.FrameId, frame.FramePayload, out var value, out var defn))
         {
-            if (!parseOptions.Signals?.Contains(frame.FrameId) ?? false) continue;
+            if ((parseOptions.Signals?.Any() ?? false) && !parseOptions.Signals.Contains(frame.FrameId)) continue;
             logger.LogDebug("Successfully Parsed message #{MessageNumber} @ {MessageTime} (ID:{FrameId})", frames,
                 frame.FrameTime, frame.FrameId);
             logger.LogTrace("{MessageId} {MessageName} {Signals}", value.MessageId, value.MessageName,

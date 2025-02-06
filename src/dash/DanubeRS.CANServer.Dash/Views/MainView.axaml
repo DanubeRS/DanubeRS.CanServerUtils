@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:DanubeRS.CANServer.Dash.ViewModels"
              xmlns:gauge="clr-namespace:DanubeRS.CANServer.Dash.Controls.Gauge"
+             xmlns:verticalGauge="clr-namespace:DanubeRS.CANServer.Dash.Controls.VerticalGauge"
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
              x:Class="DanubeRS.CANServer.Dash.Views.MainView"
              x:DataType="vm:MainViewModel"
@@ -14,11 +15,12 @@
         <vm:MainViewModel />
     </Design.DataContext>
 
-    <Grid ColumnDefinitions="*,*" RowDefinitions="*,*">
+    <Grid ColumnDefinitions="*,*,*" RowDefinitions="*,*">
         <gauge:Gauge Grid.Column="0" Grid.Row="0" Value="{Binding BatteryPower}" MinValue="-70000" MaxValue="300000"
                      GuageName="Battery (W)" Precision="0" />
         <gauge:Gauge Grid.Column="1" Grid.Row="0" Value="{Binding BatteryTemp}" MinValue="0" MaxValue="60"
                      GuageName="Battery (c)" Precision="1" />
+        <verticalGauge:VerticalGaugeControl Grid.Row="0" Grid.Column="2" Grid.RowSpan="2"></verticalGauge:VerticalGaugeControl>
         <gauge:Gauge Grid.Column="0" Grid.Row="1" Value="{Binding BatterySoC}" MinValue="0" MaxValue="100"
                      GuageName="Battery (%)" Precision="1" />
         <gauge:Gauge Grid.Column="1" Grid.Row="1" Value="{Binding InterfaceRate}" MinValue="0" MaxValue="3000"

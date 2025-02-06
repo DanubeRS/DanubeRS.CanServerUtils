@@ -31,7 +31,7 @@ public interface IUploadOptions
     [Option("archive", Required = false, HelpText = "Archive Directory")]
     string? ArchivePath { get; set; }
 
-    [Option("watch", Required = false, HelpText = "Watch, with delay (in seconds)")]
+    [Option("watch", Required = false, HelpText = "Watch, with delay (in seconds)", Default = 60)]
     public int Watch { get; set; }
 
     [Option("influxServer", Required = true, HelpText = "InfluxDB Server to upload to")]
@@ -60,7 +60,7 @@ public interface IParseFromFilesystemOptions : IParseOptions
 public class ParseOptions : IParseFromFilesystemOptions, IUploadOptions
 {
     public IEnumerable<string> Databases { get; set; } = [];
-    public IEnumerable<uint>? Signals { get; set; }
+    public IEnumerable<uint>? Signals { get; set; } = null;
     public string? ArchivePath { get; set; }
     public int Watch { get; set; } = 0;
     public required string InfluxAddress { get; set; }
@@ -79,7 +79,7 @@ public class DownloadAndParseOptions : IDownloadOptions, IParseOptions, IUploadO
     public bool Remove { get; set; }
     public string? InputPath { get; set; }
     public IEnumerable<string> Databases { get; set; }
-    public IEnumerable<uint>? Signals { get; set; }
+    public IEnumerable<uint>? Signals { get; set; } = null;
     public string? ArchivePath { get; set; }
     public int Watch { get; set; }
     public string InfluxAddress { get; set; }
@@ -107,7 +107,7 @@ public class ContinuousDownloadAndParseOptions : IDownloadOptions, IParseOptions
     public bool Remove { get; set; }
     public string? InputPath { get; set; }
     public IEnumerable<string> Databases { get; set; }
-    public IEnumerable<uint>? Signals { get; set; }
+    public IEnumerable<uint>? Signals { get; set; } = null;
     public string? ArchivePath { get; set; }
     public int Watch { get; set; }
     public string InfluxAddress { get; set; }

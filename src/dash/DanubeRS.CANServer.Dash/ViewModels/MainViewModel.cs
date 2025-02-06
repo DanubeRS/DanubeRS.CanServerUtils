@@ -113,11 +113,15 @@ public partial class MainViewModel : ReactiveObject
                 }
                 case 0x500:
                 {
-                    var ifRate = (uint?)messageValue.Signals
+                    var ifARate = (uint?)messageValue.Signals
                         .FirstOrDefault(s => s.SignalName == "CANServer_InterfaceARate")?.Value;
-                    if (ifRate == null) continue;
-                    if (ifRate != InterfaceRate)
-                        Dispatcher.UIThread.Post(() => InterfaceRate = ifRate.Value);
+                    if (ifARate == null) continue;
+                    var ifBRate = (uint?)messageValue.Signals
+                        .FirstOrDefault(s => s.SignalName == "CANServer_InterfaceBRate")?.Value;
+                    if (ifBRate == null) continue;
+                    var combRate = ifARate.Value + ifBRate.Value;
+                    if (combRate != InterfaceRate)
+                        Dispatcher.UIThread.Post(() => InterfaceRate = combRate);
                     break;
                 }
             }

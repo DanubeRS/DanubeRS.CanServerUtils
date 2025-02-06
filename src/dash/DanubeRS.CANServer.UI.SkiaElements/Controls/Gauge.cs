@@ -12,9 +12,6 @@ public class Gauge : IRenderableControl
     private readonly float _maxValue;
     private readonly int _precision;
 
-    // Define the sweep angle for each segment of the gauge
-    private const float SweepAngle = 67.5f;
-
     public Gauge(string? name, decimal value, float width, float height, decimal minValue, decimal maxValue,
         int precision = 0)
     {
@@ -71,10 +68,7 @@ public class Gauge : IRenderableControl
         SKRect rect = new(-100, -100, 100, 100);
         rect.Inflate(-10, -10);
 
-        DrawArc(canvas, rect, 135, SweepAngle, SKColors.DarkGray);
-        DrawArc(canvas, rect, 202.5f, SweepAngle, SKColors.LightGray);
-        DrawArc(canvas, rect, 270, SweepAngle, SKColors.DarkGray);
-        DrawArc(canvas, rect, 337.5f, SweepAngle, SKColors.LightGray);
+        DrawArc(canvas, rect, 135, 270, SKColors.DarkGray);
     }
 
     /// <summary>
@@ -101,7 +95,7 @@ public class Gauge : IRenderableControl
             IsAntialias = true,
             Style = SKPaintStyle.Stroke,
             Color = color,
-            StrokeWidth = 10
+            StrokeWidth = 5
         });
     }
 
@@ -114,7 +108,7 @@ public class Gauge : IRenderableControl
         SKCanvas canvas,
         float value)
     {
-        float angle = -135f + (value - _minValue) / (_maxValue - _minValue) * 270f;
+        var angle = -135f + (value - _minValue) / (_maxValue - _minValue) * 270f;
         canvas.Save();
         canvas.RotateDegrees(angle);
 

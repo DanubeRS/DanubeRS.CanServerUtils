@@ -187,6 +187,8 @@ public class Downloader(string url, ILogger<Downloader> logger)
             }
             catch (Exception e) when (e is OperationCanceledException or TaskCanceledException)
             {
+                logger.LogInformation(e, "Operation cancelled");
+                throw;
             }
             catch (Exception e)
             {
