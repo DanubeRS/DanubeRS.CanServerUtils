@@ -39,6 +39,7 @@ public class Gauge : IRenderableControl
         DrawNeedle(canvas, (float)_value);
         DrawNeedleScrew(canvas);
         DrawValueText(canvas);
+        canvas.Restore();
     }
 
     /// <summary>

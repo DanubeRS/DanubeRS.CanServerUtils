@@ -21,6 +21,7 @@ public class VerticalGauge : IRenderableControl
     }
     public void Render(SKCanvas canvas)
     {
+        canvas.Restore();
         DrawBackground(canvas);
         DrawValueMarkers(canvas);
         DrawValueBar(canvas, _value);
@@ -31,42 +32,64 @@ public class VerticalGauge : IRenderableControl
     {
         var halfHeight = (_height - 8) / 2;
         var valueHeightInPx = halfHeight / Math.Abs(value < 0 ? _minValue : _maxValue) * value;
-        var rect = new SKRect(24, halfHeight - valueHeightInPx - 18, 84, halfHeight - valueHeightInPx + 18);
-        canvas.DrawRect(rect, new SKPaint()
+        var outerRect = new SKRect(24, halfHeight - valueHeightInPx - 18, 84, halfHeight - valueHeightInPx + 18);
+        var innerRect = new SKRect(26, halfHeight - valueHeightInPx - 16, 82, halfHeight - valueHeightInPx + 16);
+        canvas.DrawRect(outerRect, new SKPaint()
+        {
+            Style = SKPaintStyle.Fill,
+            StrokeWidth = 0,
+            Color = SKColors.LightGray,
+        });
+        canvas.DrawRect(innerRect, new SKPaint()
         {
             Style = SKPaintStyle.Fill,
             Color = value < 0 ? SKColors.LimeGreen : SKColors.Blue
         });
-        canvas.DrawRect(rect, new SKPaint()
-        {
-            Style = SKPaintStyle.Stroke,
-            StrokeWidth = 2,
-            Color = SKColors.LightGray,
-        });
         var indicatorPath = new SKPath();
-        indicatorPath.MoveTo(rect.Left, rect.Top);
-        indicatorPath.LineTo(14, halfHeight - valueHeightInPx);
-        indicatorPath.LineTo(rect.Left, rect.Bottom);
+        indicatorPath.MoveTo(outerRect.Left, outerRect.Top + 8);
+        indicatorPath.LineTo(4, halfHeight - valueHeightInPx);
+        indicatorPath.LineTo(outerRect.Left, outerRect.Bottom - 8);
         indicatorPath.Close();
         canvas.DrawPath(indicatorPath, new SKPaint()
         {
             Style = SKPaintStyle.Fill,
-            StrokeWidth = 2,
+            StrokeWidth = 0,
             Color = SKColors.LightGray
         });
         
-        var textPaint = new SKPaint()
+        // canvas.Save();
+        
+        var mainTextPaint = new SKPaint()
         {
             IsAntialias = true,
             Color = value < 0 ? SKColors.Black : SKColors.White,
             TextSize = 24f,
             Typeface = SKTypeface.FromFamilyName("monospace")
         };
-        var textBounds = new SKRect();
+        
+        var subTextPaint = new SKPaint()
+        {
+            IsAntialias = true,
+            Color = value < 0 ? SKColors.Black : SKColors.White,
+            TextSize = 16f,
+            Typeface = SKTypeface.FromFamilyName("monospace")
+        };
+        
+        var mainTextBounds = new SKRect();
+        var subTextBounds = new SKRect();
         var text = value.ToString("N0");
-        textPaint.MeasureText(text, ref textBounds);
+        mainTextPaint.MeasureText(text, ref mainTextBounds);
+        subTextPaint.MeasureText(text, ref subTextBounds);
+        
+        canvas.ClipRect(innerRect);
+        canvas.DrawText(text, 30, halfHeight - valueHeightInPx + 12, mainTextPaint);
+        canvas.DrawText("0", 30 + mainTextBounds.Width + 2, halfHeight - valueHeightInPx + 12 + 15, subTextPaint);
+        canvas.DrawText("1", 30 + mainTextBounds.Width + 2, halfHeight - valueHeightInPx + 12 + 15 - (subTextBounds.Height + 2), subTextPaint);
+        canvas.DrawText("2", 30 + mainTextBounds.Width + 2, halfHeight - valueHeightInPx + 12 + 15 - (subTextBounds.Height + 2) * 2, subTextPaint);
+        
+        canvas.Save();
+        canvas.Restore();
 
-        canvas.DrawText(text, 30, halfHeight - valueHeightInPx + textBounds.Height / 2, textPaint);
     }
 
     public void DrawValueBar(SKCanvas canvas, float value)
@@ -179,7 +202,7 @@ public class VerticalGauge : IRenderableControl
         canvas.DrawRect(bgRect, new SKPaint()
        {
            Style = SKPaintStyle.Fill,
-           Color = SKColors.Gray
+           Color = SKColors.Black
        }); 
        canvas.DrawRect(bgRect, new SKPaint()
        {
