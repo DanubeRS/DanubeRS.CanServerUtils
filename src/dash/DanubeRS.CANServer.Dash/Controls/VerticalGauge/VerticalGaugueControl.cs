@@ -30,6 +30,9 @@ public class VerticalGauge : Control
     public static readonly StyledProperty<decimal> MaxValueProperty =
         AvaloniaProperty.Register<VerticalGauge, decimal>(nameof(MaxValue), 100);
     
+    public static readonly StyledProperty<int> MultiplierProperty =
+        AvaloniaProperty.Register<VerticalGauge, int>(nameof(Multiplier), 1);
+    
     public decimal Value
     {
         get => GetValue(ValueProperty);
@@ -48,7 +51,13 @@ public class VerticalGauge : Control
         set => SetValue(MaxValueProperty, value);
     }
 
-    private class VerticalGaugeDrawOp(Rect bounds, GlyphRun noSkia, decimal minValue, decimal maxValue, decimal value) : ICustomDrawOperation
+    public int Multiplier
+    {
+        get => GetValue(MultiplierProperty);
+        set => SetValue(MultiplierProperty, value);
+    }
+
+    private class VerticalGaugeDrawOp(Rect bounds, GlyphRun noSkia, decimal minValue, decimal maxValue, decimal value, int multiplier) : ICustomDrawOperation
     {
         public void Dispose()
         {
@@ -71,7 +80,7 @@ public class VerticalGauge : Control
             canvas.Save();
 
             var render = new CANServerDask.SkiaElements.Controls.VerticalGauge((float)bounds.Width,
-                (float)bounds.Height, (float)minValue, (float)maxValue, (float)value);
+                (float)bounds.Height, (float)minValue, (float)maxValue, (float)value/multiplier);
             render.Render(canvas);
             canvas.Restore();
         }
@@ -81,7 +90,7 @@ public class VerticalGauge : Control
     
     public override void Render(DrawingContext context)
     {
-        context.Custom(new VerticalGaugeDrawOp(new Rect(0, 0, Bounds.Width, Bounds.Height), _noSkia, MinValue, MaxValue, Value / 1000));
+        context.Custom(new VerticalGaugeDrawOp(new Rect(0, 0, Bounds.Width, Bounds.Height), _noSkia, MinValue, MaxValue, Value, Multiplier));
         Dispatcher.UIThread.InvokeAsync(InvalidateVisual, DispatcherPriority.Background);
     }
 }

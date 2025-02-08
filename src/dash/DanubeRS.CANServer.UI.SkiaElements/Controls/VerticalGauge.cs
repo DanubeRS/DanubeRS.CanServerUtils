@@ -11,7 +11,7 @@ public class VerticalGauge : IRenderableControl
     private readonly float _value;
     private readonly float _minValue;
 
-    public VerticalGauge(float width, float height, float minValue, float maxValue, float value)
+    public VerticalGauge(float width, float height, float minValue, float maxValue, float value, float multiplier = 1000)
     {
         _width = width;
         _height = height;
@@ -57,8 +57,6 @@ public class VerticalGauge : IRenderableControl
             Color = SKColors.LightGray
         });
         
-        // canvas.Save();
-        
         var mainTextPaint = new SKPaint()
         {
             IsAntialias = true,
@@ -77,15 +75,28 @@ public class VerticalGauge : IRenderableControl
         
         var mainTextBounds = new SKRect();
         var subTextBounds = new SKRect();
-        var text = value.ToString("N0");
+        var text = Math.Abs(Math.Round(value, MidpointRounding.ToZero)).ToString("N0");
         mainTextPaint.MeasureText(text, ref mainTextBounds);
         subTextPaint.MeasureText(text, ref subTextBounds);
         
         canvas.ClipRect(innerRect);
         canvas.DrawText(text, 30, halfHeight - valueHeightInPx + 12, mainTextPaint);
-        canvas.DrawText("0", 30 + mainTextBounds.Width + 2, halfHeight - valueHeightInPx + 12 + 15, subTextPaint);
-        canvas.DrawText("1", 30 + mainTextBounds.Width + 2, halfHeight - valueHeightInPx + 12 + 15 - (subTextBounds.Height + 2), subTextPaint);
-        canvas.DrawText("2", 30 + mainTextBounds.Width + 2, halfHeight - valueHeightInPx + 12 + 15 - (subTextBounds.Height + 2) * 2, subTextPaint);
+
+        var fraction = Math.Abs(value % 1.0);
+        var fractionDigit = Math.Floor(Math.Round(fraction, 1, MidpointRounding.ToZero) * 10);
+        var subtextX = 34 + mainTextBounds.Width;
+        var subtextY = halfHeight - valueHeightInPx + 12;
+        var subtextOffset = (fraction % 0.1) * subTextBounds.Height;
+
+        var upperDigit = fractionDigit - 1;
+        if (upperDigit < 0) upperDigit += 9;
+        else if (upperDigit > 10) upperDigit =- 10;
+        
+        var lowerDigit = fractionDigit + 1;
+        if (lowerDigit < 0) lowerDigit += 9;
+        else if (lowerDigit > 10) lowerDigit =- 10;
+        
+        canvas.DrawText(fractionDigit.ToString("N0"), subtextX, subtextY, subTextPaint);
         
         canvas.Save();
         canvas.Restore();
