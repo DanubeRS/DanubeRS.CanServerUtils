@@ -95,6 +95,10 @@ public class DownloadOptions : IDownloadOptions
     public required string Address { get; set; }
     public required string OutputPath { get; set; }
     public bool Remove { get; set; } = false;
+    [Option('w', "watch", Required = false, HelpText = "Interval to watch for new files")]
+    public int Watch { get; set; } = 0;
+    [Option("killWhenAlive", Required = false, HelpText = "Kill the loop when the CANServer has woken up")]
+    public bool KillWhenAlive { get; set; } = false;
 }
 
 [Verb("continuousDownloadAndParse", false, new[] { "cdp" },

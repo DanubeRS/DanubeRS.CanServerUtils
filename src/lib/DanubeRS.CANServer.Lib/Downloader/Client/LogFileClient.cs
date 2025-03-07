@@ -73,6 +73,18 @@ public class LogFileClient : IDisposable
     {
         await _client.GetAsync("/restart", cancellationToken);
     }
+
+    public async Task<LogFileStatus?> GetStats()
+    {
+        var response = await _client.GetAsync("/stats");
+        return await response.Content.ReadFromJsonAsync<LogFileStatus>();
+    }
+}
+
+public class LogFileStatus
+{
+    [JsonPropertyName("bus_rx")] public long[] BusRxRate { get; set; }
+    [JsonPropertyName("bus_tx")] public long[] BusTxRate { get; set; }
 }
 
 public class LogFileRecord

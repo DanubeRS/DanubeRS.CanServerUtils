@@ -23,24 +23,33 @@ public class Downloader(string url, ILogger<Downloader> logger)
         return new LogFileClient(httpClient);
     }
 
-    public async Task DownloadAllFiles(LogFileType type, bool deleteOnDownload = false, bool implicitLogDisable = false,
+    public async Task<int> DownloadAllFiles(LogFileType type, bool deleteOnDownload = false, bool implicitLogDisable = false,
         string? outputPath = null, CancellationToken cancellationToken = default,
-        Action<string>? onFileDownloaded = null, Func<IEnumerable<LogFileRecord>, bool>? shouldRunTest = null)
+        Action<string>? onFileDownloaded = null, Func<IEnumerable<LogFileRecord>, LogFileClient, Task<bool>>? shouldDownloadAllFilesTest = null,
+        Func<LogFileRecord, LogFileClient, Task<(bool skip, bool skipAll)>>? shouldDownloadFileTest = null)
     {
         using var client = CreateClient();
-        var isAlive = await client.GetIsAlive(cancellationToken);
+        bool isAlive = false;
+        try
+        {
+            isAlive = await client.GetIsAlive(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to get alive status, assuming false...");
+        }
         if (!isAlive)
         {
             logger.LogWarning("Client is not alive. Returning");
-            return;
+            return 0;
         }
 
         var allFiles = await GetStoredFiles(client);
 
-        if (shouldRunTest != null && !shouldRunTest.Invoke(allFiles))
+        if (shouldDownloadAllFilesTest != null && !await shouldDownloadAllFilesTest.Invoke(allFiles, client))
         {
             logger.LogDebug("Download files test has failed, so not downloading anything...");
-            return;
+            return 0;
         }
 
         var logStatus = await client.GetLoggingStatus();
@@ -59,7 +68,7 @@ public class Downloader(string url, ILogger<Downloader> logger)
                 throw new DownloaderException("Logging is not disabled before download");
             }
 
-            await DownloadAllFilesInternal(client, deleteOnDownload, outputPath, cancellationToken, onFileDownloaded);
+            return await DownloadAllFilesInternal(client, deleteOnDownload, outputPath, cancellationToken, onFileDownloaded, shouldDownloadFileTest);
         }
         finally
         {
@@ -78,8 +87,9 @@ public class Downloader(string url, ILogger<Downloader> logger)
         }
     }
 
-    private async Task DownloadAllFilesInternal(LogFileClient client, bool deleteOnDownload,
+    private async Task<int> DownloadAllFilesInternal(LogFileClient client, bool deleteOnDownload,
         string? outputPath, CancellationToken cancellationToken = default, Action<string>? onDownloaded = null,
+        Func<LogFileRecord, LogFileClient, Task<(bool skip, bool skipAll)>>? shouldDownloadFileTest = null,
         IEnumerable<LogFileRecord>? allFiles = null)
     {
         var downloadDate = DateTimeOffset.UtcNow;
@@ -94,8 +104,24 @@ public class Downloader(string url, ILogger<Downloader> logger)
             outputDir.Create();
         }
 
+        var downloadCount = 0;
         foreach (var file in allFiles.OrderBy(f => f.Name))
         {
+            if (shouldDownloadFileTest != null)
+            {
+                var (skip, skipAll) = await shouldDownloadFileTest.Invoke(file, client);
+                if (skipAll)
+                {
+                    logger.LogInformation("All remaining files should be skipped...");
+                    return downloadCount;
+                }
+                if (skip)
+                {
+                    logger.LogInformation("File {file} should be skipped...", file.Name);
+                    continue;
+                }
+            }
+            
             var notFoundRetry = new RetryStrategyOptions<string?>()
             {
                 ShouldHandle =
@@ -184,6 +210,8 @@ public class Downloader(string url, ILogger<Downloader> logger)
                         continue;
                     }
                 }
+                
+                downloadCount++;
             }
             catch (Exception e) when (e is OperationCanceledException or TaskCanceledException)
             {
@@ -195,6 +223,8 @@ public class Downloader(string url, ILogger<Downloader> logger)
                 logger.LogError(e, "Failed to download log file");
             }
         }
+
+        return downloadCount;
     }
 
     private static async Task<IReadOnlyCollection<LogFileRecord>> GetStoredFiles(LogFileClient client)

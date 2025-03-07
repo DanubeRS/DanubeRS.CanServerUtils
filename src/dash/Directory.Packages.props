@@ -17,7 +17,7 @@
     <PackageVersion Include="Avalonia.Android" Version="11.2.1" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.3.2" />
     <PackageVersion Include="ReactiveUI" Version="20.1.63" />
-    <PackageVersion Include="SkiaSharp" Version="2.88.8" />
+    <PackageVersion Include="SkiaSharp" Version="3.116.1" />
     <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.116.1" />
     <PackageVersion Include="Xamarin.AndroidX.Core.SplashScreen" Version="1.0.1.1" />
   </ItemGroup>

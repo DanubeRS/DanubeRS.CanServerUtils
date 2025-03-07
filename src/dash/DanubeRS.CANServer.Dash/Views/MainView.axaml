@@ -15,16 +15,23 @@
         <vm:MainViewModel />
     </Design.DataContext>
 
-    <Grid ColumnDefinitions="*,*,*" RowDefinitions="*,*">
+    <Grid ColumnDefinitions="*,*,*,*,*" RowDefinitions="*,*">
         <gauge:Gauge Grid.Column="0" Grid.Row="0" Value="{Binding BatteryPower}" MinValue="-70000" MaxValue="300000"
                      GuageName="Battery (W)" Precision="0" />
         <gauge:Gauge Grid.Column="1" Grid.Row="0" Value="{Binding BatteryTemp}" MinValue="0" MaxValue="60"
                      GuageName="Battery (c)" Precision="1" />
-        <!-- <verticalGauge:VerticalGauge Grid.Row="0" Grid.Column="2" Grid.RowSpan="2" MinValue="-70" MaxValue="310" Value="{Binding BatteryPower}" Multiplier="1000"></verticalGauge:VerticalGauge> -->
-        <verticalGauge:VerticalGauge Grid.Row="0" Grid.Column="2" Grid.RowSpan="2" MinValue="-70" MaxValue="310" Value="{Binding BatteryPower}" Multiplier="1000"></verticalGauge:VerticalGauge>
-        <gauge:Gauge Grid.Column="0" Grid.Row="1" Value="{Binding BatterySoC}" MinValue="0" MaxValue="100"
+        <gauge:Gauge Grid.Column="2" Grid.Row="0" Value="{Binding BatterySoC}" MinValue="0" MaxValue="100"
                      GuageName="Battery (%)" Precision="1" />
-        <gauge:Gauge Grid.Column="1" Grid.Row="1" Value="{Binding InterfaceRate}" MinValue="0" MaxValue="3000"
+        <gauge:Gauge Grid.Column="3" Grid.Row="0" Value="{Binding BatterySoC}" MinValue="0" MaxValue="100"
+                     GuageName="Battery (%)" Precision="1" />
+        <verticalGauge:VerticalGauge Grid.Row="0" Grid.Column="4" Grid.RowSpan="2" MinValue="-70" MaxValue="310" Value="{Binding BatteryPower}" Multiplier="1000"></verticalGauge:VerticalGauge>
+        <gauge:Gauge Grid.Column="0" Grid.Row="1" Value="{Binding InterfaceRate}" MinValue="0" MaxValue="3000"
                      GuageName="IF Speed" Precision="0" />
+        <gauge:Gauge Grid.Column="1" Grid.Row="1" Value="{Binding BatterySoC}" MinValue="0" MaxValue="100"
+                     GuageName="Battery (%)" Precision="1" />
+        <gauge:Gauge Grid.Column="2" Grid.Row="1" Value="{Binding InterfaceRate}" MinValue="0" MaxValue="3000"
+                     GuageName="IF Speed" Precision="0" />
+        <gauge:Gauge Grid.Column="3" Grid.Row="1" Value="{Binding BatterySoC}" MinValue="0" MaxValue="100"
+                     GuageName="Battery (%)" Precision="1" />
     </Grid>
 </UserControl>

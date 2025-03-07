@@ -14,6 +14,8 @@ using Microsoft.Extensions.Logging;
 using File = System.IO.File;
 using LogLevel = Microsoft.Extensions.Logging.LogLevel;
 
+const int fileCountThreshold = 1;
+
 var loggerFactory = LoggerFactory.Create(b =>
 {
     b.AddConsole();
@@ -36,6 +38,20 @@ parserResult.MapResult(
 );
 return;
 
+
+bool FilesBelowThresholdTest(IEnumerable<LogFileRecord> files)
+{
+    var fileCount = files?.Count();
+    if (fileCount <= fileCountThreshold)
+    {
+        logger.LogInformation("{FileCount} files are ready to download, but this is below the threshold ({FileCountThreshold})", fileCount, fileCountThreshold);
+        return false;
+    }
+
+    logger.LogInformation("{FileCount} files are ready to download; which is above the threshold ({FileCountThreshold}) running routine:", fileCount, fileCountThreshold);
+    return true;
+}
+
 async Task<int> ContinuousDownloadAndParse(ContinuousDownloadAndParseOptions opts,
     CancellationToken cancellationToken = default)
 {
@@ -45,7 +61,6 @@ async Task<int> ContinuousDownloadAndParse(ContinuousDownloadAndParseOptions opt
     var dbc = await BootstrapDatabase(opts);
     var influxClient = InfluxWriteClientFactory(opts);
     var shouldDownload = false;
-    const int fileCountThreshold = 1;
 
     var client = await clientFactory.CreateAsync(message =>
     {
@@ -92,24 +107,17 @@ async Task<int> ContinuousDownloadAndParse(ContinuousDownloadAndParseOptions opt
     {
         if (cancellationToken.IsCancellationRequested) break;
         // There is no active logging, so lets go ahead and download!
+
         if (shouldDownload)
         {
             // TODO do a download file threshold check here?
             logger.LogInformation("Download is ready; warming up...");
+
             try
             {
                 // Only download if there are more than one files (i.e: there is actually something to get!
-                await DownloadInternal(opts, (files) =>
-                    {
-                        var fileCount = files?.Count();
-                        if (fileCount <= fileCountThreshold)
-                        {
-                            logger.LogInformation("{FileCount} files are ready to download, but this is below the threshold ({FileCountThreshold})", fileCount, fileCountThreshold);
-                            return false;
-                        }
-                        logger.LogInformation("{FileCount} files are ready to download; which is above the threshold ({FileCountThreshold}) running routine:", fileCount, fileCountThreshold);
-                        return true;
-                    }, queueFile, internalCts.Token,
+
+                await DownloadInternal(opts, (files, _) => Task.FromResult(FilesBelowThresholdTest(files)), null, queueFile, internalCts.Token,
                     forceRemove: true);
             }
             catch (TaskCanceledException)
@@ -141,7 +149,7 @@ async Task<int> DownloadAndParse(DownloadAndParseOptions options)
     var dbc = await BootstrapDatabase(options);
     var (queueWait, queueFile, queueComplete) = await BuildParsePipeline(dbc,
         (s, ct) => ArchiveDownloadedFile(s, archiveDirectory, ct), CancellationToken.None, influxClient, options, options);
-    await DownloadInternal(options, null, queueFile);
+    await DownloadInternal(options, null, null, queueFile);
     queueComplete();
     await queueWait;
     return 0;
@@ -173,20 +181,53 @@ async Task<(Task queueWait, Action<string> queueFile, Action onQueueComplete)> B
     return (writeFile.Completion, s => inputFile.Post(s), inputFile.Complete);
 }
 
+async Task<bool> BusIsActive(LogFileClient client)
+{
+    var stats = await client.GetStats();
+    if (stats == null) return false;
+    if (stats.BusRxRate.Sum() > 0)
+    {
+        logger.LogInformation("Bus is active");
+        return true;
+    }
+    logger.LogDebug("Bus is inactive");
+    return false;
+}
+
 async Task<int> Download(DownloadOptions options)
 {
-    return await DownloadInternal(options);
+    while (true)
+    {
+        try
+        {
+            await DownloadInternal(options,
+                async (records, client) => FilesBelowThresholdTest(records) &&
+                                           !(options.KillWhenAlive && await BusIsActive(client)),
+                async (_, client) => (false, options.KillWhenAlive && await BusIsActive(client)));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error occured in loop");
+        }
+        if (options.Watch <= 0)
+            break;
+        logger.LogInformation("Successfully performed a download loop. Waiting {delay}s before next check", options.Watch);
+        await Task.Delay(TimeSpan.FromSeconds(options.Watch));
+    }
+
+    return 0;
 }
 
 async Task<int> DownloadInternal(IDownloadOptions downloadOptions,
-    Func<IEnumerable<LogFileRecord>, bool>? shouldRunTest = null, Action<string>? onFileDownloaded = null,
+    Func<IEnumerable<LogFileRecord>, LogFileClient, Task<bool>>? shouldDownloadAllFilesTest = null, 
+    Func<LogFileRecord, LogFileClient, Task<(bool skip, bool skipAll)>>? shouldDownloadFileTest = null, 
+    Action<string>? onFileDownloaded = null,
     CancellationToken cancellationToken = default, bool forceRemove = false)
 {
     var downloader = new Downloader(downloadOptions.Address, loggerFactory.CreateLogger<Downloader>());
-    await downloader.DownloadAllFiles(LogFileType.Interval, downloadOptions.Remove || forceRemove, true,
+    return await downloader.DownloadAllFiles(LogFileType.Interval, downloadOptions.Remove || forceRemove, true,
         downloadOptions.OutputPath,
-        cancellationToken, onFileDownloaded, shouldRunTest);
-    return 0;
+        cancellationToken, onFileDownloaded, shouldDownloadAllFilesTest, shouldDownloadFileTest);
 }
 
 async Task<int> Parse(ParseOptions options)

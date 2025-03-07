@@ -73,7 +73,7 @@ public class PandasClientFactory
                     _logger.LogWarning(e, "Failed to send heartbeat");
                 }
 
-                await Task.Delay(5000, cancellationToken);
+                await Task.Delay(1000, cancellationToken);
             }
         }
 

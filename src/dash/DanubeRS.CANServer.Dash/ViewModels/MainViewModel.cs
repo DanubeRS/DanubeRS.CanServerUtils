@@ -66,7 +66,7 @@ public partial class MainViewModel : ReactiveObject
             dbc.AddFile(sr);
         }
 
-        var url = "192.168.8.243";
+        var url = "192.168.4.1";
         var clientFactory = new PandasClientFactory(url, 1338, NullLoggerFactory.Instance);
         var client = await clientFactory.CreateAsync((message) => HandlePandaMessages(message, dbc));
         await client.Track(
