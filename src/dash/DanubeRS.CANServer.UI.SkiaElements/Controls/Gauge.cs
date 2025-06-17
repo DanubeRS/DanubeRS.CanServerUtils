@@ -2,33 +2,31 @@ using SkiaSharp;
 
 namespace DanubeRS.CANServerDask.SkiaElements.Controls;
 
-public class Gauge : IRenderableControl
+public record GaugeValue(decimal Value);
+
+public class Gauge : IRenderableControl<GaugeValue>
 {
     private readonly string? _name;
-    private readonly decimal _value;
-    private readonly float _width;
-    private readonly float _height;
     private readonly float _minValue;
     private readonly float _maxValue;
     private readonly int _precision;
 
-    public Gauge(string? name, decimal value, float width, float height, decimal minValue, decimal maxValue,
+    public Gauge(string? name, decimal minValue, decimal maxValue,
         int precision = 0)
     {
         _name = name;
-        _value = decimal.Round(value, precision, MidpointRounding.ToPositiveInfinity);
-        _width = width;
-        _height = height;
         _minValue = (float)minValue;
         _maxValue = (float)maxValue;
         _precision = precision;
     }
 
-    public void Render(SKCanvas canvas)
+    public void Render(SKCanvas canvas, GaugeValue value, int width, int height, int x = 0, int y = 0)
     {
-        var size = Math.Min(_width, _height);
-        var centerX = _width / 2;
-        var centerY = _height / 2;
+        canvas.Save();
+        var valueNum = decimal.Round(value.Value, _precision, MidpointRounding.ToPositiveInfinity);
+        var size = Math.Min(width, height);
+        var centerX = width / 2 + x;
+        var centerY = height / 2 + y;
         var scale = size / 210f;
 
         canvas.Translate(centerX, centerY);
@@ -36,9 +34,9 @@ public class Gauge : IRenderableControl
 
         // DrawBackground(canvas, size);
         DrawGauge(canvas);
-        DrawNeedle(canvas, (float)_value);
+        DrawNeedle(canvas, valueNum);
         DrawNeedleScrew(canvas);
-        DrawValueText(canvas);
+        DrawValueText(canvas, valueNum);
         canvas.Restore();
     }
 
@@ -107,9 +105,10 @@ public class Gauge : IRenderableControl
     /// <param name="value">The value represented by the needle.</param>
     private void DrawNeedle(
         SKCanvas canvas,
-        float value)
+        decimal value)
     {
-        var angle = -135f + (value - _minValue) / (_maxValue - _minValue) * 270f;
+        var clampValue = Math.Min(_maxValue, Math.Max(_minValue, (float)value));
+        var angle = -135f + ((float)clampValue - _minValue) / (_maxValue - _minValue) * 270f;
         canvas.Save();
         canvas.RotateDegrees(angle);
 
@@ -150,7 +149,7 @@ public class Gauge : IRenderableControl
     /// </summary>
     /// <param name="canvas">The canvas to draw on.</param>
     private void DrawValueText(
-        SKCanvas canvas)
+        SKCanvas canvas, decimal value)
     {
         SKPaint textPaint = new()
         {
@@ -162,7 +161,7 @@ public class Gauge : IRenderableControl
         if (_name != null)
             DrawUnitText(canvas, _name, 95, textPaint);
         textPaint.TextSize = 16;
-        DrawUnitText(canvas, _value.ToString("N0"), 75, textPaint);
+        DrawUnitText(canvas, value.ToString("N0"), 75, textPaint);
     }
 
     /// <summary>

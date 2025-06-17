@@ -3,34 +3,32 @@ using SkiaSharp;
 
 namespace DanubeRS.CANServerDask.SkiaElements.Controls;
 
-public class VerticalGauge : IRenderableControl
+public record VerticalGaugeValue(decimal Value);
+
+public class VerticalGauge : IRenderableControl<VerticalGaugeValue>
 {
-    private readonly float _width;
-    private readonly float _height;
     private readonly float _maxValue;
-    private readonly float _value;
     private readonly float _minValue;
 
-    public VerticalGauge(float width, float height, float minValue, float maxValue, float value, float multiplier = 1000)
+    public VerticalGauge(float minValue, float maxValue)
     {
-        _width = width;
-        _height = height;
         _maxValue = maxValue;
-        _value = value;
         _minValue = minValue;
     }
-    public void Render(SKCanvas canvas)
+
+    public void Render(SKCanvas canvas, VerticalGaugeValue value, int width, int height, int x = 0, int y = 0)
     {
+        canvas.Save();
+        DrawBackground(canvas, height, width);
+        DrawValueMarkers(canvas, height, width);
+        DrawValueBar(canvas, (float)value.Value, height);
+        DrawValueIndicatorBox(canvas, (float)value.Value, height);
         canvas.Restore();
-        DrawBackground(canvas);
-        DrawValueMarkers(canvas);
-        DrawValueBar(canvas, _value);
-        DrawValueIndicatorBox(canvas, _value);
     }
 
-    public void DrawValueIndicatorBox(SKCanvas canvas, float value)
+    public void DrawValueIndicatorBox(SKCanvas canvas, float value, int height)
     {
-        var halfHeight = (_height - 8) / 2;
+        var halfHeight = (height - 8) / 2;
         var valueHeightInPx = halfHeight / Math.Abs(value < 0 ? _minValue : _maxValue) * value;
         var outerRect = new SKRect(24, halfHeight - valueHeightInPx - 18, 84, halfHeight - valueHeightInPx + 18);
         var innerRect = new SKRect(26, halfHeight - valueHeightInPx - 16, 82, halfHeight - valueHeightInPx + 16);
@@ -56,7 +54,7 @@ public class VerticalGauge : IRenderableControl
             StrokeWidth = 0,
             Color = SKColors.LightGray
         });
-        
+
         var mainTextPaint = new SKPaint()
         {
             IsAntialias = true,
@@ -64,7 +62,7 @@ public class VerticalGauge : IRenderableControl
             TextSize = 24f,
             Typeface = SKTypeface.FromFamilyName("monospace")
         };
-        
+
         var subTextPaint = new SKPaint()
         {
             IsAntialias = true,
@@ -72,13 +70,13 @@ public class VerticalGauge : IRenderableControl
             TextSize = 16f,
             Typeface = SKTypeface.FromFamilyName("monospace")
         };
-        
+
         var mainTextBounds = new SKRect();
         var subTextBounds = new SKRect();
         var text = Math.Abs(Math.Round(value, MidpointRounding.ToZero)).ToString("N0");
         mainTextPaint.MeasureText(text, ref mainTextBounds);
         subTextPaint.MeasureText(text, ref subTextBounds);
-        
+
         canvas.ClipRect(innerRect);
         canvas.DrawText(text, 30, halfHeight - valueHeightInPx + 12, mainTextPaint);
 
@@ -90,22 +88,21 @@ public class VerticalGauge : IRenderableControl
 
         var upperDigit = fractionDigit - 1;
         if (upperDigit < 0) upperDigit += 9;
-        else if (upperDigit > 10) upperDigit =- 10;
-        
+        else if (upperDigit > 10) upperDigit = -10;
+
         var lowerDigit = fractionDigit + 1;
         if (lowerDigit < 0) lowerDigit += 9;
-        else if (lowerDigit > 10) lowerDigit =- 10;
-        
+        else if (lowerDigit > 10) lowerDigit = -10;
+
         canvas.DrawText(fractionDigit.ToString("N0"), subtextX, subtextY, subTextPaint);
-        
+
         canvas.Save();
         canvas.Restore();
-
     }
 
-    public void DrawValueBar(SKCanvas canvas, float value)
+    private void DrawValueBar(SKCanvas canvas, float value, int height)
     {
-        var halfHeight = (_height - 8) / 2;
+        var halfHeight = (height - 8) / 2;
         var valueHeightInPx = halfHeight / Math.Abs(value < 0 ? _minValue : _maxValue) * value;
         var rect = new SKRect(4, halfHeight - valueHeightInPx, 14, halfHeight);
         canvas.DrawRect(rect, new SKPaint
@@ -115,22 +112,22 @@ public class VerticalGauge : IRenderableControl
         });
     }
 
-    public void DrawValueMarkers(SKCanvas canvas)
+    private void DrawValueMarkers(SKCanvas canvas, int height, int width)
     {
-        var halfHeight = (_height - 8) / 2;
-        
+        var halfHeight = (height - 8) / 2;
+
         // Render halfway line
-        canvas.DrawLine(4, halfHeight, 104, halfHeight, new SKPaint()
+        canvas.DrawLine(4, halfHeight, width - 4, halfHeight, new SKPaint()
         {
             StrokeWidth = 1,
             Color = SKColors.LightGray
         });
 
         DrawUpperValueMarkers(canvas, halfHeight);
-        DrawLowerValueMarkers(canvas, halfHeight);
+        DrawLowerValueMarkers(canvas, halfHeight, height);
     }
-    
-    private void DrawLowerValueMarkers(SKCanvas canvas, float halfHeight)
+
+    private void DrawLowerValueMarkers(SKCanvas canvas, float halfHeight, int height)
     {
         var step = 1;
         const int markerThresholdInPx = 50;
@@ -146,7 +143,7 @@ public class VerticalGauge : IRenderableControl
         {
             var value = marker * step * 10;
             var posInPx = halfHeight - markerSpacing * marker;
-            if (posInPx > _height - 20) continue;
+            if (posInPx > height - 20) continue;
             canvas.DrawLine(4, posInPx, 24, posInPx, new SKPaint()
             {
                 StrokeWidth = 1,
@@ -160,7 +157,7 @@ public class VerticalGauge : IRenderableControl
                 TextSize = 16f,
                 Typeface = SKTypeface.FromFamilyName("monospace")
             };
-            
+
             var textBounds = new SKRect();
             var text = value.ToString("N0");
             textPaint.MeasureText(text, ref textBounds);
@@ -207,19 +204,19 @@ public class VerticalGauge : IRenderableControl
         }
     }
 
-    private void DrawBackground(SKCanvas canvas)
+    private void DrawBackground(SKCanvas canvas, int height, int width)
     {
-        var bgRect = new SKRect(4, 4, 104, _height - 8);
+        var bgRect = new SKRect(4, 4, width - 4, height - 8);
         canvas.DrawRect(bgRect, new SKPaint()
-       {
-           Style = SKPaintStyle.Fill,
-           Color = SKColors.Black
-       }); 
-       canvas.DrawRect(bgRect, new SKPaint()
-       {
-           Style = SKPaintStyle.Stroke,
-           Color = SKColors.LightGray,
-           StrokeWidth = 2
-       });
+        {
+            Style = SKPaintStyle.Fill,
+            Color = SKColors.Black
+        });
+        canvas.DrawRect(bgRect, new SKPaint()
+        {
+            Style = SKPaintStyle.Stroke,
+            Color = SKColors.LightGray,
+            StrokeWidth = 2
+        });
     }
 }

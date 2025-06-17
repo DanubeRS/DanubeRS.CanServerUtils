@@ -8,11 +8,16 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="NetVips" Version="3.0.0" />
-      <PackageReference Include="NetVips.Native" Version="8.16.0" />
-      <PackageReference Include="NetVips.Native.osx-arm64" Version="8.16.0" />
-      <PackageReference Include="SkiaSharp" Version="3.116.1" />
-      <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.116.1" />
+        <PackageReference Include="InfluxDB.Client" Version="4.18.0"/>
+        <PackageReference Include="NetVips" Version="3.0.0"/>
+        <PackageReference Include="NetVips.Native" Version="8.16.0"/>
+        <PackageReference Include="NetVips.Native.osx-arm64" Version="8.16.0"/>
+        <PackageReference Include="SkiaSharp" Version="3.116.1"/>
+        <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.116.1"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\dash\DanubeRS.CANServer.UI.SkiaElements\DanubeRS.CANServer.UI.SkiaElements.csproj"/>
     </ItemGroup>
 
 </Project>

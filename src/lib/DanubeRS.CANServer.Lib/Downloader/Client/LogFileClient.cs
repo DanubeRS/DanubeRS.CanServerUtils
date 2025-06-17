@@ -3,42 +3,55 @@ using System.Text.Json.Serialization;
 
 namespace DanubeRS.CANServer.Lib.Downloader.Client;
 
-public class LogFileClient : IDisposable
+using GetLogFilesResponse = (LogFileRecord[] files, bool isEnd);
+
+public interface ILogFileClient
 {
-    private readonly HttpClient _client;
+    Task<LoggingStatus> GetLoggingStatus(CancellationToken cancellationToken = default);
+
+    Task SetLoggingMode(LoggingMode type, int? interval, int filterInterval,
+        CancellationToken cancellationToken = default);
+
+    Task<GetLogFilesResponse> GetLogFiles(long offset = 0, CancellationToken cancellationToken = default);
+    Task GetLogFileData(LogFileRecord record, Stream target, CancellationToken cancellationToken = default);
+    Task<bool> GetIsAlive(CancellationToken cancellationToken = default);
+    Task DeleteFile(LogFileRecord file, CancellationToken cancellationToken = default);
+    Task ResetServer(CancellationToken cancellationToken = default);
+    Task<LogFileStatus?> GetStats(CancellationToken cancellationToken = default);
+}
+
+public class LogFileClient(HttpClient client) : IDisposable, ILogFileClient
+{
     private const string Cont = "---cont---";
 
-    public LogFileClient(HttpClient client)
+    public async Task<LoggingStatus> GetLoggingStatus(CancellationToken cancellationToken = default)
     {
-        _client = client;
-    }
-
-    public async Task<LoggingStatus> GetLoggingStatus()
-    {
-        var logStatusResponse = await _client.GetAsync("/logs/load");
+        var logStatusResponse = await client.GetAsync("/logs/load", cancellationToken);
         logStatusResponse.EnsureSuccessStatusCode();
-        var response = await logStatusResponse.Content.ReadFromJsonAsync<LoggingStatus>();
+        var response = await logStatusResponse.Content.ReadFromJsonAsync<LoggingStatus>(cancellationToken);
         if (response == null)
             throw new NullReferenceException("Unable to get logging status");
         return response;
     }
 
-    public async Task SetLoggingMode(LoggingMode type, int? interval, int filterInterval)
+    public async Task SetLoggingMode(LoggingMode type, int? interval, int filterInterval,
+        CancellationToken cancellationToken = default)
     {
         if (type == LoggingMode.Interval && interval == null) throw new ArgumentException("Interval must be specified");
-        var response = await _client.PostAsync("/logs/save", new FormUrlEncodedContent(new Dictionary<string, string?>()
+        var response = await client.PostAsync("/logs/save", new FormUrlEncodedContent(new Dictionary<string, string?>()
         {
             { "logmode", type.ToString("D") },
             { "interval", interval?.ToString("D") },
             { "interval_mode3", filterInterval.ToString("D") },
-        }));
+        }), cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 
-    public async Task<(LogFileRecord[] files, bool isEnd)> GetLogFiles(long offset = 0)
+    public async Task<GetLogFilesResponse> GetLogFiles(long offset = 0, CancellationToken cancellationToken = default)
     {
         var isEnd = true;
-        var logFiles = await _client.GetFromJsonAsync<LogFileRecord[]>("/logs/files?offset=" + offset);
+        var logFiles =
+            await client.GetFromJsonAsync<LogFileRecord[]>("/logs/files?offset=" + offset, cancellationToken);
         if (logFiles == null)
             return ([], true);
         if (logFiles.Any(f => f.Name == Cont))
@@ -46,38 +59,45 @@ public class LogFileClient : IDisposable
         return (logFiles.Where(f => f.Name != Cont).ToArray(), isEnd);
     }
 
-    public async Task GetLogFileData(LogFileRecord record, Stream target, CancellationToken cancellationToken)
+    public async Task GetLogFileData(LogFileRecord record, Stream target, CancellationToken cancellationToken = default)
     {
-        var logFiles = await _client.GetStreamAsync("/logs/files/download?id=" + record.Name, cancellationToken);
+        var logFiles = await client.GetStreamAsync("/logs/files/download?id=" + record.Name, cancellationToken);
         await logFiles.CopyToAsync(target, cancellationToken);
     }
 
-    public async Task<bool> GetIsAlive(CancellationToken cancellationToken)
+    public async Task<bool> GetIsAlive(CancellationToken cancellationToken = default)
     {
-        var response = await _client.GetAsync("/stats");
-        return response.IsSuccessStatusCode;
+        try
+        {
+            var response = await client.GetAsync("/stats", cancellationToken);
+            return response.IsSuccessStatusCode;
+        }
+        catch (HttpRequestException e)
+        {
+            return false;
+        }
     }
 
     public void Dispose()
     {
-        _client.Dispose();
+        client.Dispose();
     }
 
-    public async Task DeleteFile(LogFileRecord file, CancellationToken cancellationToken)
+    public async Task DeleteFile(LogFileRecord file, CancellationToken cancellationToken = default)
     {
-        await _client.PostAsync($"/logs/files/delete",
-            new FormUrlEncodedContent(new[] { new KeyValuePair<string, string>("id", file.Name) }), cancellationToken);
+        await client.PostAsync($"/logs/files/delete",
+            new FormUrlEncodedContent([new KeyValuePair<string, string>("id", file.Name)]), cancellationToken);
     }
 
-    public async Task ResetServer(CancellationToken cancellationToken)
+    public async Task ResetServer(CancellationToken cancellationToken = default)
     {
-        await _client.GetAsync("/restart", cancellationToken);
+        await client.GetAsync("/restart", cancellationToken);
     }
 
-    public async Task<LogFileStatus?> GetStats()
+    public async Task<LogFileStatus?> GetStats(CancellationToken cancellationToken = default)
     {
-        var response = await _client.GetAsync("/stats");
-        return await response.Content.ReadFromJsonAsync<LogFileStatus>();
+        var response = await client.GetAsync("/stats", cancellationToken);
+        return await response.Content.ReadFromJsonAsync<LogFileStatus>(cancellationToken);
     }
 }
 

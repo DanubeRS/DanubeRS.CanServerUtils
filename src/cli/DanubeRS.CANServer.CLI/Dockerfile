@@ -1,22 +1,22 @@
-﻿FROM mcr.microsoft.com/dotnet/runtime:8.0 AS base
+﻿FROM mcr.microsoft.com/dotnet/runtime:9.0 AS base
 USER $APP_UID
 WORKDIR /app
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 ARG BUILD_CONFIGURATION=Release
-WORKDIR /src
-COPY ["DanubeRS.CANServerUtils.CLI/DanubeRS.CANServerUtils.CLI.csproj", "DanubeRS.CANServerUtils.CLI/"]
-COPY ["DanubeRS.CanServerUtils.Library/DanubeRS.CanServerUtils.Library.csproj", "DanubeRS.CanServerUtils.Library/"]
-RUN dotnet restore "DanubeRS.CANServerUtils.CLI/DanubeRS.CANServerUtils.CLI.csproj"
-COPY . .
-WORKDIR "/src/DanubeRS.CANServerUtils.CLI"
-RUN dotnet build "DanubeRS.CANServerUtils.CLI.csproj" -c $BUILD_CONFIGURATION -o /app/build
+ARG TARGETARCH
+WORKDIR /app
+COPY ["cli/DanubeRS.CANServer.CLI/DanubeRS.CANServer.CLI.csproj", "cli/DanubeRS.CANServer.CLI/"]
+COPY ["lib/DanubeRS.CANServer.Lib/DanubeRS.CANServer.Lib.csproj", "lib/DanubeRS.CANServer.Lib/"]
+RUN dotnet restore "./cli/DanubeRS.CANServer.CLI/DanubeRS.CANServer.CLI.csproj" -a $TARGETARCH
+COPY . ./
+RUN dotnet build "./cli/DanubeRS.CANServer.CLI/DanubeRS.CANServer.CLI.csproj" -c $BUILD_CONFIGURATION -o /app/build -a $TARGETARCH
 
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "DanubeRS.CANServerUtils.CLI.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "./cli/DanubeRS.CANServer.CLI/DanubeRS.CANServer.CLI.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false -a $TARGETARCH
 
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "DanubeRS.CANServerUtils.CLI.dll"]
+ENTRYPOINT ["dotnet", "DanubeRS.CANServer.CLI.dll"]
