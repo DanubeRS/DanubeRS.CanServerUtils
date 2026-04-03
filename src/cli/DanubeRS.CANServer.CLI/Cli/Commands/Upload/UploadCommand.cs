@@ -1,7 +1,7 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
 
-namespace DanubeRS.CANServer.CLI.Cli.Commands.Upload;
+namespace DanubeRS.CANServer.CLI.Commands.Upload;
 
 public class UploadCommand : Command
 {

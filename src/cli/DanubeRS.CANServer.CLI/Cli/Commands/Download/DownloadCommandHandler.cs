@@ -4,7 +4,7 @@ using DanubeRS.CANServer.Lib.Downloader;
 using DanubeRS.CANServer.Lib.Downloader.Client;
 using Microsoft.Extensions.Logging;
 
-namespace DanubeRS.CANServer.CLI.Cli.Commands.Download;
+namespace DanubeRS.CANServer.CLI.Commands.Download;
 
 public class DownloadCommandHandler(DownloaderFactory downloaderFactory, ILogger<DownloadCommandHandler> logger)
     : CommandHandlerBase

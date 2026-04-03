@@ -1,6 +1,6 @@
 using SkiaSharp;
 
-namespace DanubeRS.CANServerDask.SkiaElements;
+namespace DanubeRS.CANServer.UI.SkiaElements;
 
 public interface IRenderableControl<TPayload>
 {

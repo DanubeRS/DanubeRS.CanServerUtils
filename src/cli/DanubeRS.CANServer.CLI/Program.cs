@@ -2,10 +2,10 @@
 using System.CommandLine.Hosting;
 using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
-using DanubeRS.CANServer.CLI.Cli;
-using DanubeRS.CANServer.CLI.Cli.Commands.Download;
-using DanubeRS.CANServer.CLI.Cli.Commands.Root;
-using DanubeRS.CANServer.CLI.Cli.Commands.Upload;
+using DanubeRS.CANServer.CLI;
+using DanubeRS.CANServer.CLI.Commands.Download;
+using DanubeRS.CANServer.CLI.Commands.Root;
+using DanubeRS.CANServer.CLI.Commands.Upload;
 using DanubeRS.CANServer.Lib.BinaryLogs;
 using DanubeRS.CANServer.Lib.Downloader;
 using DanubeRS.CANServer.Lib.Downloader.Client;

@@ -1,6 +1,6 @@
 using SkiaSharp;
 
-namespace DanubeRS.CANServerDask.SkiaElements.Controls;
+namespace DanubeRS.CANServer.UI.SkiaElements.Controls;
 
 public record GaugeValue(decimal Value);
 

@@ -1,7 +1,7 @@
 using System.CommandLine;
 using System.CommandLine.Invocation;
 
-namespace DanubeRS.CANServer.CLI.Cli.Commands.Download;
+namespace DanubeRS.CANServer.CLI.Commands.Download;
 
 public class DownloadCommand : Command
 {

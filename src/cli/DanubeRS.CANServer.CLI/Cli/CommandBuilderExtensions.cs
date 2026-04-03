@@ -1,13 +1,13 @@
 using System.CommandLine;
 using System.CommandLine.Builder;
-using DanubeRS.CANServer.CLI.Cli.Commands.Download;
-using DanubeRS.CANServer.CLI.Cli.Commands.Root;
-using DanubeRS.CANServer.CLI.Cli.Commands.Upload;
+using DanubeRS.CANServer.CLI.Commands.Download;
+using DanubeRS.CANServer.CLI.Commands.Root;
+using DanubeRS.CANServer.CLI.Commands.Upload;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Logging.Debug;
 
-namespace DanubeRS.CANServer.CLI.Cli;
+namespace DanubeRS.CANServer.CLI;
 
 public static class CommandBuilderExtensions
 {

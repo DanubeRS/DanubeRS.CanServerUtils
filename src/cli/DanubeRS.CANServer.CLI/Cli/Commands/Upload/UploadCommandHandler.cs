@@ -7,7 +7,7 @@ using InfluxDB.Client.Api.Domain;
 using InfluxDB.Client.Writes;
 using Microsoft.Extensions.Logging;
 
-namespace DanubeRS.CANServer.CLI.Cli.Commands.Upload;
+namespace DanubeRS.CANServer.CLI.Commands.Upload;
 
 public delegate Task<Database> DatabaseFactory(FileInfo[] files);
 

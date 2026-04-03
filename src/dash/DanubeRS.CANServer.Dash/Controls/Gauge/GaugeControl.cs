@@ -114,7 +114,7 @@ public class Gauge : Control
             var canvas = lease.SkCanvas;
             canvas.Save();
 
-            var render = new CANServerDask.SkiaElements.Controls.Gauge(_name,
+            var render = new DanubeRS.CANServer.UI.SkiaElements.Controls.Gauge(_name,
                 Math.Min(Math.Max(_value.GetValueOrDefault(0), _minValue), _maxValue), _minValue, _maxValue,
                 _precision);
             render.Render(canvas);

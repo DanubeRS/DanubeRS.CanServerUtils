@@ -1,6 +1,6 @@
 using System.CommandLine.Invocation;
 
-namespace DanubeRS.CANServer.CLI.Cli.Commands;
+namespace DanubeRS.CANServer.CLI.Commands;
 
 public abstract class CommandHandlerBase : ICommandHandler
 {

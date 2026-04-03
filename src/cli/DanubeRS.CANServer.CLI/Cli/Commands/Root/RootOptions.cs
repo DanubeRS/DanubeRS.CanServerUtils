@@ -1,7 +1,7 @@
 using System.CommandLine;
 using Microsoft.Extensions.Logging;
 
-namespace DanubeRS.CANServer.CLI.Cli.Commands.Root;
+namespace DanubeRS.CANServer.CLI.Commands.Root;
 
 public static class RootOptions
 {
