@@ -1,6 +1,5 @@
 using System.CommandLine.Invocation;
 using System.Diagnostics;
-using DanubeRS.CANServer.CLI.Cli.Commands.Download;
 using DanubeRS.CANServer.Lib.BinaryLogs;
 using DanubeRS.CanServerUtils.Lib;
 using InfluxDB.Client;
