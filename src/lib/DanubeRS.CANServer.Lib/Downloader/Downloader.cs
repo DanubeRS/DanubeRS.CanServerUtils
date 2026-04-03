@@ -24,10 +24,10 @@ public delegate Task OnFileDownloaded(string file, ILogFileClient client);
 /// <summary>
 /// Downloader facade for listing, iterating, downloading, and optionally deleting files from a CANServer SD Card
 /// </summary>
-/// <param name="url"></param>
-/// <param name="logger"></param>
 public class Downloader(ILogFileClient client, ILogger<Downloader> logger)
 {
+    private readonly ResiliencePipeline<string?> _downloadPipeline = BuildDownloadPipeline(client, logger);
+
     public async Task<int> DownloadAllFiles(LogFileType type, bool deleteOnDownload = false,
         bool implicitLogDisable = false,
         DirectoryInfo? outputPath = null, CancellationToken cancellationToken = default,
@@ -131,59 +131,11 @@ public class Downloader(ILogFileClient client, ILogger<Downloader> logger)
                     logger.LogInformation("File {file} should be skipped...", file.Name);
                     continue;
                 }
-            }
-
-            var notFoundRetry = new RetryStrategyOptions<string?>()
-            {
-                ShouldHandle =
-                    new PredicateBuilder<string?>().Handle<HttpRequestException>(exception =>
-                            exception.StatusCode == HttpStatusCode.NotFound)
-                        .Handle<TimeoutRejectedException>(),
-                BackoffType = DelayBackoffType.Constant,
-                Delay = TimeSpan.FromSeconds(10),
-                OnRetry = async args =>
-                {
-                    logger.LogWarning("Server was unable to find the file, suggesting that it needs to be restarted");
-                    logger.LogInformation("Restarting server. Attempt {Attempt}", args.AttemptNumber);
-                    await client.ResetServer(args.Context.CancellationToken);
-                    var isAliveLoop = new RetryStrategyOptions<bool>()
-                    {
-                        Delay = TimeSpan.FromSeconds(1),
-                        BackoffType = DelayBackoffType.Exponential,
-                        ShouldHandle = arguments => ValueTask.FromResult(!arguments.Outcome.Result),
-                    };
-                    await new ResiliencePipelineBuilder<bool>().AddRetry(isAliveLoop).Build().ExecuteAsync(
-                        async (clientState, token) => await clientState.GetIsAlive(token),
-                        client,
-                        args.Context.CancellationToken).ConfigureAwait(false);
-                    logger.LogInformation("Server successfully restarted. Downloading file again");
-                },
-                MaxRetryAttempts = 3,
-            };
-
-            var badFileSizeRetry = new RetryStrategyOptions<string?>()
-            {
-                ShouldHandle = new PredicateBuilder<string?>().HandleResult(s => s == null),
-                BackoffType = DelayBackoffType.Constant,
-                Delay = TimeSpan.Zero,
-                MaxRetryAttempts = 3,
-                OnRetry = ctx =>
-                {
-                    logger.LogWarning(
-                        "Returned file was not the expected size. Downloading again (attempt {Attempts})...",
-                        ctx.AttemptNumber);
-                    return ValueTask.CompletedTask;
-                },
-            };
+           }
 
             try
             {
-                var archiveFile = await new ResiliencePipelineBuilder<string?>()
-                    .AddRetry(notFoundRetry)
-                    .AddTimeout(TimeSpan.FromMinutes(5))
-                    .AddRetry(badFileSizeRetry)
-                    .Build()
-                    .ExecuteAsync(async (clientState, token) =>
+                var archiveFile = await _downloadPipeline.ExecuteAsync(async (clientState, token) =>
                     {
                         logger.LogInformation("Downloading file {File}", file.Name);
                         var archiveFile = Path.Combine(outputDir.FullName, $"{downloadDate:yyMMdd_hhmmss}_{file.Name}");
@@ -255,6 +207,59 @@ public class Downloader(ILogFileClient client, ILogger<Downloader> logger)
 
         return allFiles;
     }
+
+    private static ResiliencePipeline<string?> BuildDownloadPipeline(ILogFileClient client, ILogger<Downloader> logger)
+    {
+        var notFoundRetry = new RetryStrategyOptions<string?>()
+        {
+            ShouldHandle =
+                new PredicateBuilder<string?>().Handle<HttpRequestException>(exception =>
+                        exception.StatusCode == HttpStatusCode.NotFound)
+                    .Handle<Polly.Timeout.TimeoutRejectedException>(),
+            BackoffType = DelayBackoffType.Constant,
+            Delay = TimeSpan.FromSeconds(10),
+            OnRetry = async args =>
+            {
+                logger.LogWarning("Server was unable to find the file, suggesting that it needs to be restarted");
+                logger.LogInformation("Restarting server. Attempt {Attempt}", args.AttemptNumber);
+                await client.ResetServer(args.Context.CancellationToken);
+                var isAliveLoop = new RetryStrategyOptions<bool>()
+                {
+                    Delay = TimeSpan.FromSeconds(1),
+                    BackoffType = DelayBackoffType.Exponential,
+                    ShouldHandle = arguments => ValueTask.FromResult(!arguments.Outcome.Result),
+                };
+                await new ResiliencePipelineBuilder<bool>().AddRetry(isAliveLoop).Build().ExecuteAsync(
+                    async (clientState, token) => await clientState.GetIsAlive(token),
+                    client,
+                    args.Context.CancellationToken).ConfigureAwait(false);
+                logger.LogInformation("Server successfully restarted. Downloading file again");
+            },
+            MaxRetryAttempts = 3,
+        };
+
+        var badFileSizeRetry = new RetryStrategyOptions<string?>()
+        {
+            ShouldHandle = new PredicateBuilder<string?>().HandleResult(s => s == null),
+            BackoffType = DelayBackoffType.Constant,
+            Delay = TimeSpan.Zero,
+            MaxRetryAttempts = 3,
+            OnRetry = ctx =>
+            {
+                logger.LogWarning(
+                    "Returned file was not the expected size. Downloading again (attempt {Attempts})...",
+                    ctx.AttemptNumber);
+                return ValueTask.CompletedTask;
+            },
+        };
+
+        return new ResiliencePipelineBuilder<string?>()
+            .AddRetry(notFoundRetry)
+            .AddTimeout(TimeSpan.FromMinutes(5))
+            .AddRetry(badFileSizeRetry)
+            .Build();
+    }
+
 
     private class DownloaderException(string message) : Exception(message)
     {
