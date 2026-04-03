@@ -19,14 +19,27 @@ public class Database(ILogger<Database> logger)
             .SingleOrDefault(v => v.MessageId == message.Header.Id && v.SignalName == signal.Name)?.Values;
     }
 
-    public class MessageDefinition(Message message, ParsedDb db)
+    public class MessageDefinition
     {
-        public readonly SignalDefinition[] Signals =
-            message.Signals.Select(s => new SignalDefinition(message, s, db)).ToArray();
+        private static SignalDefinition CreateSignalDefinition(Message msg, Signal signal, ParsedDb database) => 
+            new(msg, signal, database);
 
-        public readonly MessageHeader Header = message.Header;
-        public readonly bool IsMultiplexed = message.Signals.Any(s => s.Multiplex is { IsSwitch: true });
-        public readonly string[] Comments = [];
+        private readonly SignalDefinition[] _signals;
+        
+        internal MessageDefinition(Message message, ParsedDb db)
+        {
+            Header = message.Header;
+            IsMultiplexed = message.Signals.Any(s => s.Multiplex is { IsSwitch: true });
+            
+            var signalsList = message.Signals.Select(s => CreateSignalDefinition(message, s, db)).ToList();
+            _signals = signalsList.ToArray();
+            SignalsByStartBit = signalsList.OrderBy(s => s.Signal.StartBit).ToArray();
+        }
+
+        public IReadOnlyList<SignalDefinition> Signals => _signals;
+        public SignalDefinition[] SignalsByStartBit { get; }
+        public MessageHeader Header { get; }
+        public bool IsMultiplexed { get; }
     }
 
     private readonly Dictionary<uint, MessageDefinition> _messageDefn = new();
@@ -40,6 +53,25 @@ public class Database(ILogger<Database> logger)
         var parsed = DbcParser.Database(tokens);
 
         StoreParsedResult(parsed.Value);
+    }
+
+    public async Task AddFileAsync(Stream stream, CancellationToken cancellationToken = default)
+    {
+        using var reader = new StreamReader(stream);
+        var dbcString = await reader.ReadToEndAsync(cancellationToken);
+        
+        var tokenizer = DbcTokenizer.Instance;
+        var tokens = tokenizer.Tokenize(dbcString);
+        var parsed = DbcParser.Database(tokens);
+
+        StoreParsedResult(parsed.Value);
+    }
+
+    public static async Task<Database> LoadAsync(ILogger<Database> logger, Stream stream, CancellationToken cancellationToken = default)
+    {
+        var database = new Database(logger);
+        await database.AddFileAsync(stream, cancellationToken);
+        return database;
     }
 
     private void StoreParsedResult(ParsedDb parsed)
@@ -73,13 +105,13 @@ public class Database(ILogger<Database> logger)
     private bool TryParseRegularMessage(MessageDefinition defn, BitArray data, out MessageValue? value)
     {
         value = null;
-        if (defn.Signals.Length == 0) return true;
+        if (defn.Signals.Count == 0) return true;
         var lastSignal = defn.Signals.OrderByDescending(s => s.Signal.StartBit).First();
         // Message size is incompatable
         if (lastSignal.Signal.StartBit + lastSignal.Signal.Size > data.Length) return false;
 
         value = new MessageValue(defn.Header.Id, defn.Header.Name,
-            defn.Signals.OrderBy(s => s.Signal.StartBit).Select(signal => GetSignalValue(data, signal)).ToArray(),
+            defn.SignalsByStartBit.Select(signal => GetSignalValue(data, signal)).ToArray(),
             null);
         return true;
     }
@@ -138,9 +170,8 @@ public class Database(ILogger<Database> logger)
         if (multiplexSignal == null)
             return false;
 
-        var switchBytes = new byte[2];
-        BitsToBytes(data, multiplexSignal.Signal.StartBit, multiplexSignal.Signal.Size, switchBytes);
-        var switchValue = BitConverter.ToUInt16(switchBytes);
+        BitsToBytes(data, multiplexSignal.Signal.StartBit, multiplexSignal.Signal.Size, _signalValueBytes);
+        var switchValue = BitConverter.ToUInt16(_signalValueBytes);
         var filteredSignals = defn.Signals
             .Where(s => s.Signal.Multiplex != null && s.Signal.Multiplex.SwitchValue == switchValue)
             .ToArray();
