@@ -2,16 +2,13 @@ using System.CommandLine.Invocation;
 using System.Diagnostics;
 using DanubeRS.CANServer.Lib.BinaryLogs;
 using DanubeRS.CanServerUtils.Lib;
+using DanubeRS.CANServer.CLI.Configuration;
 using InfluxDB.Client;
 using InfluxDB.Client.Api.Domain;
 using InfluxDB.Client.Writes;
 using Microsoft.Extensions.Logging;
 
 namespace DanubeRS.CANServer.CLI.Commands.Upload;
-
-public delegate Task<Database> DatabaseFactory(FileInfo[] files);
-
-public delegate Task<Reader?> ReaderFactory(Stream stream);
 
 public class UploadCommandHandler(
     DatabaseFactory databaseFactory,
