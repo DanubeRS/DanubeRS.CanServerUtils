@@ -20,9 +20,15 @@ public interface ILogFileClient
     Task<LogFileStatus?> GetStats(CancellationToken cancellationToken = default);
 }
 
-public class LogFileClient(HttpClient client) : IDisposable, ILogFileClient
+public class LogFileClient(HttpClient client) : IAsyncDisposable, ILogFileClient
 {
     private const string Cont = "---cont---";
+
+     public async ValueTask DisposeAsync()
+    {
+        client.Dispose();
+        await Task.CompletedTask;
+    }
 
     public async Task<LoggingStatus> GetLoggingStatus(CancellationToken cancellationToken = default)
     {
@@ -76,11 +82,6 @@ public class LogFileClient(HttpClient client) : IDisposable, ILogFileClient
         {
             return false;
         }
-    }
-
-    public void Dispose()
-    {
-        client.Dispose();
     }
 
     public async Task DeleteFile(LogFileRecord file, CancellationToken cancellationToken = default)
