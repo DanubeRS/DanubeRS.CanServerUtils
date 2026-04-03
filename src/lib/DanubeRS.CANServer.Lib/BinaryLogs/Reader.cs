@@ -3,18 +3,19 @@ using Microsoft.Extensions.Logging;
 
 namespace DanubeRS.CANServer.Lib.BinaryLogs;
 
-public class Reader
-{
-    private readonly Stream _stream;
-    private readonly ILogger _logger;
-    private uint _logVersion = 0;
-    private ulong _lastSyncTime = 0L;
+public class Reader : IAsyncDisposable
+    {
+        private readonly Stream _stream;
+        private readonly ILogger _logger;
+        private uint _logVersion = 0;
+        private ulong _lastSyncTime = 0L;
 
-    //Buffers
-    private byte[] _timeSyncBuffer = new byte[8];
-    private byte[] _frameDataBuffer = new byte[5];
+        //Buffers
+        private byte[] _timeSyncBuffer = new byte[8];
+        private byte[] _frameDataBuffer = new byte[5];
+        private bool _disposed = false;
 
-    public static async Task<Reader?> Open(Stream stream, ILogger logger)
+        public static async Task<Reader?> Open(Stream stream, ILogger logger)
     {
         var reader = new Reader(stream, logger);
         return await reader.Initialise() ? reader : null;
@@ -125,11 +126,8 @@ public class Reader
                 var framePayload = new byte[frameLength];
                 var read = _stream.Read(framePayload);
                 if (read != frameLength)
-                {
-                    //TODO
-                    return null;
-                    throw new Exception("Invalid Frame");
-                }
+                    throw new EndOfStreamException(
+                        $"Expected {frameLength} bytes but only read {read} at stream position {_stream.Position}");
 
                 return new LogReaderFrame(frameTime, (uint)frameId, (uint)busId, framePayload);
             }
@@ -145,57 +143,64 @@ public class Reader
         }
     }
 
-    private LogReaderFrame? ReadV1Frame(byte start)
-    {
-        while (true)
+ private LogReaderFrame? ReadV1Frame(byte start)
         {
-            switch (start)
+            while (true)
             {
-                // Mark
-                case 0xcd:
-                    throw new NotImplementedException("Marks not supported (yet)");
-                // Time sync
-                case 0xce:
-                    try
-                    {
-                        _stream.ReadExactly(_timeSyncBuffer, 0, 8);
-                    }
-                    catch (EndOfStreamException e)
-                    {
-                        throw new Exception("Time sync payload is the wrong length", e);
-                    }
+                switch (start)
+                {
+                    // Mark
+                    case 0xcd:
+                        throw new NotImplementedException("Marks not supported (yet)");
+                    // Time sync
+                    case 0xce:
+                        try
+                        {
+                            _stream.ReadExactly(_timeSyncBuffer, 0, 8);
+                        }
+                        catch (EndOfStreamException e)
+                        {
+                            throw new Exception("Time sync payload is the wrong length", e);
+                        }
 
-                    _lastSyncTime = BitConverter.ToUInt64(_timeSyncBuffer);
-                    start = (byte)_stream.ReadByte();
-                    break;
-                // Regular payload
-                case 0xcf:
-                    _stream.ReadExactly(_frameDataBuffer, 0, 5);
-                    var frameTimeOffset =
-                        BitConverter.ToUInt16(
-                            _frameDataBuffer, 0) * 1000;
+                        _lastSyncTime = BitConverter.ToUInt64(_timeSyncBuffer);
+                        start = (byte)_stream.ReadByte();
+                        break;
+                    // Regular payload
+                    case 0xcf:
+                        _stream.ReadExactly(_frameDataBuffer, 0, 5);
+                        var frameTimeOffset =
+                            BitConverter.ToUInt16(
+                                _frameDataBuffer, 0) * 1000;
 
-                    var frameTime = _lastSyncTime + (ulong)frameTimeOffset;
+                        var frameTime = _lastSyncTime + (ulong)frameTimeOffset;
 
-                    var frameId = BitConverter.ToUInt16(_frameDataBuffer, 2);
-                    // Length & Bus stored in same byte
-                    var frameLength = _frameDataBuffer[4] & 0x0f;
-                    var busId = (_frameDataBuffer[4] & 0xf0) >> 4;
+                        var frameId = BitConverter.ToUInt16(_frameDataBuffer, 2);
+                        // Length & Bus stored in same byte
+                        var frameLength = _frameDataBuffer[4] & 0x0f;
+                        var busId = (_frameDataBuffer[4] & 0xf0) >> 4;
 
-                    frameLength = frameLength switch
-                    {
-                        < 0 => 0,
-                        > 8 => 8,
-                        _ => frameLength
-                    };
+                        frameLength = frameLength switch
+                        {
+                            < 0 => 0,
+                            > 8 => 8,
+                            _ => frameLength
+                        };
 
-                    var framePayload = new byte[frameLength];
-                    _stream.ReadExactly(framePayload);
-                    return new LogReaderFrame(frameTime, frameId, (uint)busId, framePayload);
+                        var framePayload = new byte[frameLength];
+                        _stream.ReadExactly(framePayload);
+                        return new LogReaderFrame(frameTime, frameId, (uint)busId, framePayload);
+                }
             }
         }
+
+        public async ValueTask DisposeAsync()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            await _stream.DisposeAsync();
+        }
     }
-}
 
 public record LogReaderFrame(ulong FrameTime, uint FrameId, uint BusId, byte[] FramePayload)
 {

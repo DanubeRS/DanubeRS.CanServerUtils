@@ -13,7 +13,6 @@ public class DownloadCommandHandler(DownloaderFactory downloaderFactory, ILogger
 
     protected override async Task<int> Run(InvocationContext context, CancellationToken cancellationToken)
     {
-        logger.LogInformation("test");
         var options = DownloadOptionValues.Parse(context);
         var downloader = downloaderFactory(options.Endpoint);
 
@@ -22,8 +21,8 @@ public class DownloadCommandHandler(DownloaderFactory downloaderFactory, ILogger
             try
             {
                 await DownloadInternal(downloader, options,
-                    async (records, client) => FilesBelowThresholdTest(records) &&
-                                               !(options.KillWhenAlive && await BusIsActive(client, cancellationToken)),
+       async (records, client) => ShouldDownloadAllFilesBasedOnCount(records) &&
+                                                !(options.KillWhenAlive && await BusIsActive(client, cancellationToken)),
                     async (_, client) =>
                         new(false, options.KillWhenAlive && await BusIsActive(client, cancellationToken)),
                     null, cancellationToken);
@@ -43,19 +42,19 @@ public class DownloadCommandHandler(DownloaderFactory downloaderFactory, ILogger
         return 0;
     }
 
-    bool FilesBelowThresholdTest(IEnumerable<LogFileRecord> files)
+    private bool ShouldDownloadAllFilesBasedOnCount(IEnumerable<LogFileRecord> files)
     {
-        var fileCount = files?.Count();
+        var fileCount = files?.Count() ?? 0;
         if (fileCount <= FileCountThreshold)
         {
             logger.LogInformation(
-                "{FileCount} files are ready to download, but this is below the threshold ({FileCountThreshold})",
+                "{FileCount} files found, below threshold ({FileCountThreshold}) - skipping download",
                 fileCount, FileCountThreshold);
             return false;
         }
 
         logger.LogInformation(
-            "{FileCount} files are ready to download; which is above the threshold ({FileCountThreshold}) running routine:",
+            "{FileCount} files found, above threshold ({FileCountThreshold}) - proceeding with download",
             fileCount, FileCountThreshold);
         return true;
     }

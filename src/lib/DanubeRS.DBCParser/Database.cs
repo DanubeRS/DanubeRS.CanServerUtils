@@ -132,11 +132,11 @@ public class Database(ILogger<Database> logger)
 
     private bool TryParseMultiplexedMessage(MessageDefinition defn, BitArray data, out MessageValue? value)
     {
-        value = default;
-        var bitArray = new BitArray(data);
+        value = null;
 
-
-        var multiplexSignal = defn.Signals.Single(s => s.Signal.Multiplex is { IsSwitch: true });
+        var multiplexSignal = defn.Signals.FirstOrDefault(s => s.Signal.Multiplex is { IsSwitch: true });
+        if (multiplexSignal == null)
+            return false;
 
         var switchBytes = new byte[2];
         BitsToBytes(data, multiplexSignal.Signal.StartBit, multiplexSignal.Signal.Size, switchBytes);
@@ -144,6 +144,9 @@ public class Database(ILogger<Database> logger)
         var filteredSignals = defn.Signals
             .Where(s => s.Signal.Multiplex != null && s.Signal.Multiplex.SwitchValue == switchValue)
             .ToArray();
+
+        if (filteredSignals.Length == 0)
+            return false;
 
         var lastSignal = filteredSignals.OrderByDescending(s => s.Signal.StartBit).FirstOrDefault();
         if (lastSignal == null) return false;

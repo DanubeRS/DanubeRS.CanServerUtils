@@ -136,7 +136,7 @@ public class UploadCommandHandler(
         }
 
         points += pointData.Count;
-        await writeApiAsync.WritePointsAsync(pointData, "tesla", "danubers");
+        await writeApiAsync.WritePointsAsync(pointData, uploadOptions.InfluxDb.Bucket, uploadOptions.InfluxDb.Org);
         logger.LogDebug("Processed {points} points ({pointsSec}/sec)", points,
             (points / stopWatch.Elapsed.TotalSeconds));
 
