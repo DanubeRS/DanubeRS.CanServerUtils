@@ -1,5 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using Polly;
+using Polly.Retry;
 
 namespace DanubeRS.CANServer.Lib.Downloader.Client;
 
@@ -23,11 +25,28 @@ public interface ILogFileClient
 public class LogFileClient(HttpClient client) : IAsyncDisposable, ILogFileClient
 {
     private const string Cont = "---cont---";
+    
+    private readonly ResiliencePipeline<object> _httpPipeline = BuildHttpPipeline();
 
      public async ValueTask DisposeAsync()
     {
         client.Dispose();
         await Task.CompletedTask;
+    }
+    
+    private static ResiliencePipeline<object> BuildHttpPipeline()
+    {
+        var retryOptions = new RetryStrategyOptions<object>()
+        {
+            ShouldHandle = new PredicateBuilder<object>().Handle<HttpRequestException>(),
+            BackoffType = DelayBackoffType.Exponential,
+            Delay = TimeSpan.FromMilliseconds(500),
+            MaxRetryAttempts = 3,
+        };
+
+        return new ResiliencePipelineBuilder<object>()
+            .AddRetry(retryOptions)
+            .Build();
     }
 
     public async Task<LoggingStatus> GetLoggingStatus(CancellationToken cancellationToken = default)

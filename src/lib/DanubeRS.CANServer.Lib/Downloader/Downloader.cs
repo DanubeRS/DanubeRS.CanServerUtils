@@ -138,24 +138,31 @@ public class Downloader(ILogFileClient client, ILogger<Downloader> logger)
                 var archiveFile = await _downloadPipeline.ExecuteAsync(async (clientState, token) =>
                     {
                         logger.LogInformation("Downloading file {File}", file.Name);
-                        var archiveFile = Path.Combine(outputDir.FullName, $"{downloadDate:yyMMdd_hhmmss}_{file.Name}");
-                        await using var ms = new MemoryStream();
+                        var archiveFilePath = Path.Combine(outputDir.FullName, $"{downloadDate:yyMMdd_hhmmss}_{file.Name}");
+                        
+                        // Stream directly to disk instead of loading into memory first
+                        await using var fs = new FileStream(
+                            archiveFilePath,
+                            FileMode.CreateNew,
+                            FileAccess.Write,
+                            FileShare.None,
+                            bufferSize: 81920,
+                            useAsync: true);
+                            
                         sw.Restart();
-                        await clientState.GetLogFileData(file, ms, token);
+                        await clientState.GetLogFileData(file, fs, token);
                         var time = sw.Elapsed;
+                        
                         logger.LogDebug("Downloaded {File} ({Bytes}) in {Seconds}s ({Rate}/s)",
                             file.Name,
                             file.Size.Bytes().Humanize(),
                             time.TotalSeconds, (file.Size / time.TotalSeconds).Bytes().Humanize("000.00"));
-                        // The file length does not match what we expected
-                        if (file.Size != ms.Length) return null;
-                        ms.Seek(0, SeekOrigin.Begin);
-                        // File successfully read to mem, now write to file on disk!
-                        await using var fs =
-                            new FileStream(archiveFile,
-                                FileMode.CreateNew);
-                        await ms.CopyToAsync(fs, token);
-                        return archiveFile;
+                            
+                        // Verify the downloaded size matches expected
+                        var actualSize = fs.Length;
+                        if (file.Size != actualSize) return null;
+                        
+                        return archiveFilePath;
                     }, client, cancellationToken);
 
                 if (archiveFile == null)
