@@ -87,9 +87,9 @@ public class VerticalGauge : Control
             var canvas = lease.SkCanvas;
             canvas.Save();
 
-            var render = new DanubeRS.CANServer.UI.SkiaElements.Controls.VerticalGauge((float)bounds.Width,
-                (float)bounds.Height, (float)minValue, (float)maxValue, (float)value / multiplier);
-            render.Render(canvas);
+            var render = new DanubeRS.CANServer.UI.SkiaElements.Controls.VerticalGauge((float)minValue, (float)maxValue);
+            render.Render(canvas, new DanubeRS.CANServer.UI.SkiaElements.Controls.VerticalGaugeValue(value / multiplier),
+                (int)bounds.Width, (int)bounds.Height);
             canvas.Restore();
         }
 
