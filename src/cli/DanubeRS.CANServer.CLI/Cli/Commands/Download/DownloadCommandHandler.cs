@@ -1,5 +1,4 @@
-using System.CommandLine.Invocation;
-using System.CommandLine.NamingConventionBinder;
+using System.CommandLine;
 using DanubeRS.CANServer.Lib.Downloader;
 using DanubeRS.CANServer.Lib.Downloader.Client;
 using Microsoft.Extensions.Logging;
@@ -7,13 +6,13 @@ using Microsoft.Extensions.Logging;
 namespace DanubeRS.CANServer.CLI.Commands.Download;
 
 public class DownloadCommandHandler(DownloaderFactory downloaderFactory, ILogger<DownloadCommandHandler> logger)
-    : CommandHandlerBase
+    : ICommandAction
 {
     private const int FileCountThreshold = 1;
 
-    protected override async Task<int> Run(InvocationContext context, CancellationToken cancellationToken)
+    public async Task<int> InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
     {
-        var options = DownloadOptionValues.Parse(context);
+        var options = DownloadOptionValues.Parse(parseResult);
         var downloader = downloaderFactory(options.Endpoint);
 
         while (!cancellationToken.IsCancellationRequested)
@@ -21,8 +20,8 @@ public class DownloadCommandHandler(DownloaderFactory downloaderFactory, ILogger
             try
             {
                 await DownloadInternal(downloader, options,
-       async (records, client) => ShouldDownloadAllFilesBasedOnCount(records) &&
-                                                !(options.KillWhenAlive && await BusIsActive(client, cancellationToken)),
+                    async (records, client) => ShouldDownloadAllFilesBasedOnCount(records) &&
+                                                 !(options.KillWhenAlive && await BusIsActive(client, cancellationToken)),
                     async (_, client) =>
                         new(false, options.KillWhenAlive && await BusIsActive(client, cancellationToken)),
                     null, cancellationToken);

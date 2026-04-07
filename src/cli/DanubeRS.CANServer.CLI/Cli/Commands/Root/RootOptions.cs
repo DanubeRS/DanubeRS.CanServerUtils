@@ -9,11 +9,11 @@ public static class RootOptions
     {
         public static Verbosity Instance { get; } = new();
 
-        private Verbosity() : base("verbosity",
-            "Set the verbosity level that will be produced when running the tool")
+        private Verbosity() : base("--verbosity", "-v")
         {
-            AddAlias("v");
-            SetDefaultValue(LogLevel.Information);
+            Description = "Set the minimum log level. Valid values: None, Critical, Error, Warning, Information, Debug, Trace.";
+            HelpName = "LEVEL";
+            DefaultValueFactory = _ => LogLevel.Information;
             Arity = ArgumentArity.ZeroOrOne;
         }
     }

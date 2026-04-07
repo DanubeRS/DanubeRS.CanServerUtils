@@ -1,4 +1,4 @@
-using System.CommandLine.Invocation;
+using System.CommandLine;
 using System.Diagnostics;
 using DanubeRS.CANServer.Lib.BinaryLogs;
 using DanubeRS.CanServerUtils.Lib;
@@ -13,17 +13,17 @@ namespace DanubeRS.CANServer.CLI.Commands.Upload;
 public class UploadCommandHandler(
     DatabaseFactory databaseFactory,
     ReaderFactory readerFactory,
-    ILogger<UploadCommandHandler> logger) : CommandHandlerBase
+    ILogger<UploadCommandHandler> logger) : ICommandAction
 {
-    protected override async Task<int> Run(InvocationContext context, CancellationToken cancellationToken)
+    public async Task<int> InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
     {
-        var uploadOptions = UploadOptionsValues.Parse(context.ParseResult);
+        var uploadOptions = UploadOptionsValues.Parse(parseResult);
 
-        var inputPath = context.ParseResult.CommandResult.GetValueForOption(UploadOptions.InputPath.Instance);
-        var archiveDirectory = context.ParseResult.CommandResult.GetValueForOption(UploadOptions.ArchivePath.Instance);
+        var inputPath = parseResult.GetValue(UploadOptions.InputPath.Instance);
+        var archiveDirectory = parseResult.GetValue(UploadOptions.ArchivePath.Instance);
 
-        var watchInterval = context.ParseResult.CommandResult.GetValueForOption(UploadOptions.WatchInterval.Instance);
-        var signals = context.ParseResult.CommandResult.GetValueForOption(UploadOptions.Signals.Instance);
+        var watchInterval = parseResult.GetValue(UploadOptions.WatchInterval.Instance);
+        var signals = parseResult.GetValue(UploadOptions.Signals.Instance);
 
         var influxClient = InfluxWriteClientFactory(uploadOptions.InfluxDb);
         var database = await databaseFactory(uploadOptions.Databases ?? []);
