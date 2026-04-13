@@ -70,7 +70,7 @@ public class Reader : IAsyncDisposable
                     var remainingBuffer = new byte[22];
                     remainingBuffer[0] = (byte)frameStart;
                     var read = _stream.Read(remainingBuffer, 1, 21);
-                    if (read != 21) throw new Exception("Invalid Frame");
+                    if (read != 21) throw new InvalidFrameException("Invalid Frame", _stream.Position);
                     var logVersion = LogVersionFromBuffer(remainingBuffer);
                     // No valid header found, so go back
                     if (logVersion == 0)
@@ -158,7 +158,7 @@ public class Reader : IAsyncDisposable
                         }
                         catch (EndOfStreamException e)
                         {
-                            throw new Exception("Time sync payload is the wrong length", e);
+                            throw new InvalidFrameException("Time sync payload is the wrong length", _stream.Position, e);
                         }
 
                         _lastSyncTime = BitConverter.ToUInt64(_timeSyncBuffer);

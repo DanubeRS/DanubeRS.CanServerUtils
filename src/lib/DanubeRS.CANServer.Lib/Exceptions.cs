@@ -18,3 +18,14 @@ public class UnsupportedLogFormatException : Exception
         DetectedVersion = version;
     }
 }
+
+public class InvalidFrameException : Exception
+{
+    public long Position { get; }
+
+    public InvalidFrameException(string message, long position)
+        : base(message) => Position = position;
+
+    public InvalidFrameException(string message, long position, Exception innerException)
+        : base(message, innerException) => Position = position;
+}
