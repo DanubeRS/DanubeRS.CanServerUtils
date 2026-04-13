@@ -41,7 +41,7 @@ public static class DbcParser
 
     private static TokenListParser<DbcTokens, MessageHeader> MessageHeader { get; } =
         from boKeyword in Token.EqualToValue(DbcTokens.Identifier, "BO_")
-        from messageId in Integer
+        from messageId in UInteger
         from messageName in Token.EqualTo(DbcTokens.Identifier)
         from colon in Token.EqualTo(DbcTokens.Colon)
         from messageSize in Integer
@@ -71,6 +71,9 @@ public static class DbcParser
     private static TokenListParser<DbcTokens, int> Integer { get; } =
         Token.EqualTo(DbcTokens.Integer).Or(Token.EqualTo(DbcTokens.Double)).Select(t => int.Parse(t.ToStringValue()));
 
+    private static TokenListParser<DbcTokens, uint> UInteger { get; } =
+        Token.EqualTo(DbcTokens.Integer).Or(Token.EqualTo(DbcTokens.Double)).Select(t => uint.Parse(t.ToStringValue()));
+
     private static TokenListParser<DbcTokens, double> Scientific { get; } =
         Token.EqualTo(DbcTokens.Sci).Select(t => double.Parse(t.ToStringValue(), NumberStyles.Float));
 
@@ -92,7 +95,7 @@ public static class DbcParser
     private static TokenListParser<DbcTokens, Signal> Signal { get; } =
         from sgKeyword in Token.EqualToValue(DbcTokens.Identifier, "SG_")
         from signalName in Identifier
-        from multiplexIdentifier in Multiplex.OptionalOrDefault()
+        from multiplexDesignator in Multiplexed.OptionalOrDefault()
         from colon in Token.EqualTo(DbcTokens.Colon)
         from startBit in Integer
         from pipe in Token.EqualTo(DbcTokens.Pipe)
@@ -112,7 +115,9 @@ public static class DbcParser
         from rSquParen in Token.EqualTo(DbcTokens.RSqParen)
         from unit in QuotedString
         from reciever in Identifier
-        select new Signal(signalName, multiplexIdentifier, startBit, signalSize, order, valueType,
+        select new Signal(signalName, 
+            signalName == "M" ? new Multiplex(true, null) : multiplexDesignator, 
+            startBit, signalSize, order, valueType,
             factor, offset, min, max, unit, reciever);
 
     private static TokenListParser<DbcTokens, Message> Message { get; } =
@@ -134,13 +139,13 @@ public static class DbcParser
 
     private static TokenListParser<DbcTokens, CommentBase> MessageComment { get; } =
         from keyword in NamedIdentifier("BO_")
-        from messageId in Integer
+        from messageId in UInteger
         from comment in QuotedString
         select (CommentBase)new MessageComment(messageId, comment);
 
     private static TokenListParser<DbcTokens, CommentBase> SignalComment { get; } =
         from keyword in NamedIdentifier("SG_")
-        from messageId in Integer
+        from messageId in UInteger
         from signalName in Identifier
         from comment in QuotedString
         select (CommentBase)new SignalComment(messageId, signalName, comment);
@@ -180,9 +185,9 @@ public static class DbcParser
         select (AttributeValueType)new HexAttributeValueType(min, max);
 
     private static TokenListParser<DbcTokens, AttributeValueType> FloatAttributeValueType { get; } =
-        from keyword in NamedIdentifier("INT")
-        from min in Double
-        from max in Double
+        from keyword in NamedIdentifier("FLOAT")
+        from min in Double.Or(Scientific)
+        from max in Double.Or(Scientific)
         select (AttributeValueType)new FloatAttributeValueType(min, max);
 
     private static TokenListParser<DbcTokens, AttributeValueType> StringAttributeValueType { get; } =
@@ -246,13 +251,13 @@ public static class DbcParser
 
     private static TokenListParser<DbcTokens, AttributeObjectValue> MessageObjectValue { get; } =
         from keyword in NamedIdentifier("BO_")
-        from messageId in Integer
+        from messageId in UInteger
         from value in AttributeDefaultValue
         select (AttributeObjectValue)new MessageObjectValue(messageId, value);
 
     private static TokenListParser<DbcTokens, AttributeObjectValue> SignalObjectValue { get; } =
         from keyword in NamedIdentifier("SG_")
-        from messageId in Integer
+        from messageId in UInteger
         from signalName in Identifier
         from value in AttributeDefaultValue
         select (AttributeObjectValue)new SignalObjectValue(messageId, signalName, value);
@@ -275,7 +280,7 @@ public static class DbcParser
 
     private static TokenListParser<DbcTokens, ValueDescription> ValueDescription { get; } =
         from keyword in NamedIdentifier("VAL_")
-        from messageId in Integer
+        from messageId in UInteger
         from signalName in Identifier
         from valueDescriptionValues in Integer
             .Then((i => QuotedString.Select(s => new KeyValuePair<uint, string>((uint)i, s)))).Many()
@@ -304,14 +309,14 @@ public static class DbcParser
             attributeDefinitions, attributeDefaults, attributeValues, valueDescriptions);
 }
 
-public sealed record ValueDescription(int MessageId, string SignalName, IImmutableDictionary<uint, string> Values);
+public sealed record ValueDescription(uint MessageId, string SignalName, IImmutableDictionary<uint, string> Values);
 
 public sealed record EnvironmentObjectValue(string Name, AttributeDefaultValue Value) : AttributeObjectValue(Value);
 
-public sealed record SignalObjectValue(int MessageId, string SignalName, AttributeDefaultValue Value)
+public sealed record SignalObjectValue(uint MessageId, string SignalName, AttributeDefaultValue Value)
     : AttributeObjectValue(Value);
 
-public sealed record MessageObjectValue(int MessageId, AttributeDefaultValue Value) : AttributeObjectValue(Value);
+public sealed record MessageObjectValue(uint MessageId, AttributeDefaultValue Value) : AttributeObjectValue(Value);
 
 public sealed record NodeObjectValue(string Name, AttributeDefaultValue Value) : AttributeObjectValue(Value);
 
@@ -363,9 +368,9 @@ public record Signal(
 
 public sealed record EnvironmentComment(string Variable, string Comment) : CommentBase(Comment);
 
-public sealed record SignalComment(int MessageId, string SignalName, string Comment) : CommentBase(Comment);
+public sealed record SignalComment(uint MessageId, string SignalName, string Comment) : CommentBase(Comment);
 
-public sealed record MessageComment(int MessageId, string Comment) : CommentBase(Comment);
+public sealed record MessageComment(uint MessageId, string Comment) : CommentBase(Comment);
 
 public sealed record NodeComment(string Node, string Comment) : CommentBase(Comment);
 
@@ -375,7 +380,7 @@ public abstract record CommentBase(string Comment);
 
 public record Message(MessageHeader Header, Signal[] Signals);
 
-public record MessageHeader(int Id, string Name, int Size, string Node);
+public record MessageHeader(uint Id, string Name, int Size, string Node);
 
 public record ParsedDb(
     Version Version,
