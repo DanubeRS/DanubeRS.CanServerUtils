@@ -1,33 +1,28 @@
 using System.CommandLine;
-using System.CommandLine.Parsing;
 
-namespace DanubeRS.CANServer.CLI.Cli.Commands.Upload;
+namespace DanubeRS.CANServer.CLI.Commands.Upload;
 
 public class UploadCommand : Command
 {
     public static UploadCommand Instance { get; } = new();
 
-    public UploadCommand() : base("upload", "Upload CAN log files to InfluxDB")
+    public UploadCommand() : base("upload", "Parse CAN log files and upload decoded signals to InfluxDB")
     {
-        AddAlias("ul");
+        Aliases.Add("ul");
 
-        // Input Options
-        AddOption(UploadOptions.InputPath.Instance);
-
-        // DBC Options
-        AddOption(UploadOptions.Database.Instance);
-        AddOption(UploadOptions.Signals.Instance);
-
-        // Watch Options
-        AddOption(UploadOptions.WatchInterval.Instance);
-        AddOption(UploadOptions.ArchivePath.Instance);
-
-        // InfluxDB Options
-        AddOption(InfluxDbOptions.Endpoint.Instance);
-        AddOption(InfluxDbOptions.Org.Instance);
-        AddOption(InfluxDbOptions.Bucket.Instance);
-        AddOption(InfluxDbOptions.Token.Instance);
-        AddOption(InfluxDbOptions.Compress.Instance);
+        Options.Add(UploadOptions.InputPath.Instance);
+        Options.Add(UploadOptions.Database.Instance);
+        Options.Add(UploadOptions.Signals.Instance);
+        Options.Add(UploadOptions.WatchInterval.Instance);
+        Options.Add(UploadOptions.ArchivePath.Instance);
+        Options.Add(UploadOptions.BatchSize.Instance);
+        Options.Add(UploadOptions.RateLimitConfig.Instance);
+        Options.Add(UploadOptions.GlobalWindow.Instance);
+        Options.Add(InfluxDbOptions.Endpoint.Instance);
+        Options.Add(InfluxDbOptions.Org.Instance);
+        Options.Add(InfluxDbOptions.Bucket.Instance);
+        Options.Add(InfluxDbOptions.Token.Instance);
+        Options.Add(InfluxDbOptions.Compress.Instance);
     }
 }
 
@@ -37,11 +32,14 @@ public class UploadOptionsValues
     {
         return new UploadOptionsValues()
         {
-            InputPath = result.GetValueForOption(UploadOptions.InputPath.Instance)!,
-            Databases = result.GetValueForOption(UploadOptions.Database.Instance),
-            Signals = result.GetValueForOption(UploadOptions.Signals.Instance),
-            ArchivePath = result.GetValueForOption(UploadOptions.ArchivePath.Instance),
-            WatchInterval = result.GetValueForOption(UploadOptions.WatchInterval.Instance),
+            InputPath = result.GetValue(UploadOptions.InputPath.Instance)!,
+            Databases = result.GetValue(UploadOptions.Database.Instance),
+            Signals = result.GetValue(UploadOptions.Signals.Instance),
+            ArchivePath = result.GetValue(UploadOptions.ArchivePath.Instance),
+            WatchInterval = result.GetValue(UploadOptions.WatchInterval.Instance),
+            BatchSize = result.GetValue(UploadOptions.BatchSize.Instance),
+            RateLimitConfig = result.GetValue(UploadOptions.RateLimitConfig.Instance),
+            GlobalWindow = result.GetValue(UploadOptions.GlobalWindow.Instance),
             InfluxDb = InfluxDbOptionsValues.Parse(result),
         };
     }
@@ -51,6 +49,9 @@ public class UploadOptionsValues
     public uint[]? Signals { get; private set; }
     public FileInfo? ArchivePath { get; private set; }
     public int? WatchInterval { get; private set; }
+    public int BatchSize { get; private set; } = 5000;
+    public FileInfo? RateLimitConfig { get; private set; }
+    public int? GlobalWindow { get; private set; }
     public InfluxDbOptionsValues InfluxDb { get; private set; } = null!;
 }
 
@@ -66,11 +67,11 @@ public class InfluxDbOptionsValues
     {
         return new InfluxDbOptionsValues()
         {
-            Endpoint = result.GetValueForOption(InfluxDbOptions.Endpoint.Instance)!,
-            Org = result.GetValueForOption(InfluxDbOptions.Org.Instance)!,
-            Bucket = result.GetValueForOption(InfluxDbOptions.Bucket.Instance)!,
-            Token = result.GetValueForOption(InfluxDbOptions.Token.Instance)!,
-            Compress = result.GetValueForOption(InfluxDbOptions.Compress.Instance),
+            Endpoint = result.GetValue(InfluxDbOptions.Endpoint.Instance)!,
+            Org = result.GetValue(InfluxDbOptions.Org.Instance)!,
+            Bucket = result.GetValue(InfluxDbOptions.Bucket.Instance)!,
+            Token = result.GetValue(InfluxDbOptions.Token.Instance)!,
+            Compress = result.GetValue(InfluxDbOptions.Compress.Instance),
         };
     }
 }
@@ -79,53 +80,59 @@ public static class InfluxDbOptions
 {
     public sealed class Endpoint : Option<Uri>
     {
-        public Endpoint() : base("influx-server", "InfluxDB server endpoint")
-        {
-            IsRequired = true;
-        }
-
         public static Endpoint Instance { get; } = new();
+
+        private Endpoint() : base("--influxdb-server")
+        {
+            Description = "URL of the InfluxDB 2.x server (e.g. https://influx.example.com)";
+            HelpName = "URL";
+            Required = true;
+            CustomParser = OptionParsers.UriParser;
+        }
     }
 
     public sealed class Org : Option<string>
     {
-        public Org() : base("influx-org", "InfluxDB organization")
-        {
-            IsRequired = false;
-        }
-
         public static Org Instance { get; } = new();
+
+        private Org() : base("--influxdb-org")
+        {
+            Description = "InfluxDB organization name that owns the target bucket";
+            HelpName = "NAME";
+        }
     }
 
     public sealed class Bucket : Option<string>
     {
-        public Bucket() : base("influx-bucket", "InfluxDB bucket")
-        {
-            IsRequired = false;
-        }
-
         public static Bucket Instance { get; } = new();
+
+        private Bucket() : base("--influxdb-bucket")
+        {
+            Description = "InfluxDB bucket to write decoded CAN signal data into";
+            HelpName = "NAME";
+        }
     }
 
     public sealed class Token : Option<string>
     {
-        public Token() : base("influx-token", "InfluxDB token")
-        {
-            IsRequired = false;
-        }
-
         public static Token Instance { get; } = new();
+
+        private Token() : base("--influxdb-token")
+        {
+            Description = "InfluxDB API token with write access to the target bucket";
+            HelpName = "TOKEN";
+        }
     }
 
     public sealed class Compress : Option<bool>
     {
-        public Compress() : base("influx-compress", "Compress data before sending to InfluxDB")
-        {
-            IsRequired = false;
-            SetDefaultValue(false);
-        }
-
         public static Compress Instance { get; } = new();
+
+        private Compress() : base("--influxdb-compress")
+        {
+            Description = "Enable gzip compression on write requests to reduce network bandwidth";
+            DefaultValueFactory = _ => false;
+        }
     }
 }
 
@@ -135,9 +142,11 @@ public static class UploadOptions
     {
         public static InputPath Instance { get; } = new();
 
-        private InputPath() : base("input", "Path to the directory containing the CAN log files")
+        private InputPath() : base("--input", "-i")
         {
-            IsRequired = true;
+            Description = "Directory containing .log files to parse and upload";
+            HelpName = "DIR";
+            Required = true;
         }
     }
 
@@ -145,9 +154,10 @@ public static class UploadOptions
     {
         public static ArchivePath Instance { get; } = new();
 
-        private ArchivePath() : base("archive", "Path to the archive file once successfully parsed and uploaded")
+        private ArchivePath() : base("--archive")
         {
-            IsRequired = false;
+            Description = "Move successfully processed log files to this archive file after upload";
+            HelpName = "FILE";
         }
     }
 
@@ -155,10 +165,11 @@ public static class UploadOptions
     {
         public static WatchInterval Instance { get; } = new();
 
-        private WatchInterval() : base("watch", "Interval in seconds to watch for new files")
+        private WatchInterval() : base("--watch")
         {
-            IsRequired = false;
-            SetDefaultValue(60);
+            Description = "Poll interval in seconds to check for new log files. Set to 0 for a single pass without polling";
+            HelpName = "SECONDS";
+            DefaultValueFactory = _ => 60;
         }
     }
 
@@ -166,10 +177,11 @@ public static class UploadOptions
     {
         public static Signals Instance { get; } = new();
 
-        private Signals() : base("signals", "Signal(s) in int format to upload to the database")
+        private Signals() : base("--signals")
         {
+            Description = "Filter to only upload signals from specific CAN frame IDs. Can be specified multiple times (e.g. --signals 257 --signals 512)";
+            HelpName = "FRAME_ID";
             Arity = ArgumentArity.ZeroOrMore;
-            IsRequired = false;
         }
     }
 
@@ -177,10 +189,46 @@ public static class UploadOptions
     {
         public static Database Instance { get; } = new();
 
-        private Database() : base("dbc", "DBC reference database for signals")
+        private Database() : base("--dbc")
         {
-            IsRequired = true;
+            Description = "One or more DBC database files used to decode CAN frame payloads into named signals";
+            HelpName = "FILE";
+            Required = true;
             Arity = ArgumentArity.OneOrMore;
+        }
+    }
+
+    public sealed class BatchSize : Option<int>
+    {
+        public static BatchSize Instance { get; } = new();
+
+        private BatchSize() : base("--batch-size")
+        {
+            Description = "Number of points to batch before uploading to InfluxDB (default: 5000)";
+            HelpName = "COUNT";
+            DefaultValueFactory = _ => 5_000;
+        }
+    }
+
+    public sealed class RateLimitConfig : Option<FileInfo?>
+    {
+        public static RateLimitConfig Instance { get; } = new();
+
+        private RateLimitConfig() : base("--rate-limit-config")
+        {
+            Description = "YAML configuration file for rate limiting rules";
+            HelpName = "FILE";
+        }
+    }
+
+    public sealed class GlobalWindow : Option<int?>
+    {
+        public static GlobalWindow Instance { get; } = new();
+
+        private GlobalWindow() : base("--global-window")
+        {
+            Description = "Global rate limit window in milliseconds (applies to all signals not explicitly configured)";
+            HelpName = "MILLISECONDS";
         }
     }
 }

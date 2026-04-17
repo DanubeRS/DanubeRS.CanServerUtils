@@ -70,7 +70,7 @@ public class Reader : IAsyncDisposable
                     var remainingBuffer = new byte[22];
                     remainingBuffer[0] = (byte)frameStart;
                     var read = _stream.Read(remainingBuffer, 1, 21);
-                    if (read != 21) throw new Exception("Invalid Frame");
+                    if (read != 21) throw new InvalidFrameException("Invalid Frame", _stream.Position);
                     var logVersion = LogVersionFromBuffer(remainingBuffer);
                     // No valid header found, so go back
                     if (logVersion == 0)
@@ -98,23 +98,21 @@ public class Reader : IAsyncDisposable
             // Time sync frame
             if (start == 0xA0)
             {
-                var timeData = new byte[8];
-                _stream.ReadExactly(timeData, 0, 8);
-                _lastSyncTime = BitConverter.ToUInt64(timeData, 0);
+                _stream.ReadExactly(_timeSyncBuffer, 0, 8);
+                _lastSyncTime = BitConverter.ToUInt64(_timeSyncBuffer, 0);
             }
             // CAN Frame
             else if ((start & 0b11110000) == 0xB0)
             {
-                var frameData = new byte[5];
-                var headerRead = _stream.Read(frameData, 0, 5);
+                var headerRead = _stream.Read(_frameDataBuffer, 0, 5);
                 if (headerRead != 5) return null;
 
-                var frameTimeOffset = (start & 0x0F) + (frameData[0] << 4) + (frameData[1] << 12) +
-                                      (((frameData[2] & 0xF8) >> 3) << 20);
+                var frameTimeOffset = (start & 0x0F) + (_frameDataBuffer[0] << 4) + (_frameDataBuffer[1] << 12) +
+                                      (((_frameDataBuffer[2] & 0xF8) >> 3) << 20);
                 var frameTime = _lastSyncTime + (ulong)frameTimeOffset;
 
-                var frameId = ((frameData[2] & 0x07) << 8) + (frameData[3] & 0xFF);
-                var frameLength = frameData[4] & 0x0F;
+                var frameId = (((_frameDataBuffer[2]) & 0x07) << 8) + (_frameDataBuffer[3] & 0xFF);
+                var frameLength = _frameDataBuffer[4] & 0x0F;
                 frameLength = frameLength switch
                 {
                     < 0 => 0,
@@ -122,7 +120,7 @@ public class Reader : IAsyncDisposable
                     _ => frameLength
                 };
 
-                var busId = (frameData[4] & 0xF0) >> 4;
+                var busId = (_frameDataBuffer[4] & 0xF0) >> 4;
                 var framePayload = new byte[frameLength];
                 var read = _stream.Read(framePayload);
                 if (read != frameLength)
@@ -160,7 +158,7 @@ public class Reader : IAsyncDisposable
                         }
                         catch (EndOfStreamException e)
                         {
-                            throw new Exception("Time sync payload is the wrong length", e);
+                            throw new InvalidFrameException("Time sync payload is the wrong length", _stream.Position, e);
                         }
 
                         _lastSyncTime = BitConverter.ToUInt64(_timeSyncBuffer);

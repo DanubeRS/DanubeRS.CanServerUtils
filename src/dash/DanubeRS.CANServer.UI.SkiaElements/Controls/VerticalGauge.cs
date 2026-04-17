@@ -1,7 +1,7 @@
 using System.Security.Cryptography.X509Certificates;
 using SkiaSharp;
 
-namespace DanubeRS.CANServerDask.SkiaElements.Controls;
+namespace DanubeRS.CANServer.UI.SkiaElements.Controls;
 
 public record VerticalGaugeValue(decimal Value);
 

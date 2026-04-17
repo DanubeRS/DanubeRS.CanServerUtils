@@ -1,34 +1,33 @@
 using System.CommandLine;
-using System.CommandLine.Invocation;
 
-namespace DanubeRS.CANServer.CLI.Cli.Commands.Download;
+namespace DanubeRS.CANServer.CLI.Commands.Download;
 
 public class DownloadCommand : Command
 {
     public static DownloadCommand Instance { get; } = new();
 
-    private DownloadCommand() : base("download", "Download CAN log files from CANServer")
+    private DownloadCommand() : base("download", "Download CAN log files from a CANServer device")
     {
-        AddAlias("dl");
-        AddOption(DownloadOptions.Endpoint.Instance);
-        AddOption(DownloadOptions.Output.Instance);
-        AddOption(DownloadOptions.Watch.Instance);
-        AddOption(DownloadOptions.Remove.Instance);
-        AddOption(DownloadOptions.KillWhenAlive.Instance);
+        Aliases.Add("dl");
+        Options.Add(DownloadOptions.Endpoint.Instance);
+        Options.Add(DownloadOptions.Output.Instance);
+        Options.Add(DownloadOptions.Watch.Instance);
+        Options.Add(DownloadOptions.Remove.Instance);
+        Options.Add(DownloadOptions.KillWhenAlive.Instance);
     }
 }
 
 public class DownloadOptionValues
 {
-    public static DownloadOptionValues Parse(InvocationContext context)
+    public static DownloadOptionValues Parse(ParseResult result)
     {
         return new DownloadOptionValues
         {
-            Endpoint = context.ParseResult.GetValueForOption(DownloadOptions.Endpoint.Instance)!,
-            OutputPath = context.ParseResult.GetValueForOption(DownloadOptions.Output.Instance),
-            Watch = context.ParseResult.GetValueForOption(DownloadOptions.Watch.Instance),
-            Remove = context.ParseResult.GetValueForOption(DownloadOptions.Remove.Instance),
-            KillWhenAlive = context.ParseResult.GetValueForOption(DownloadOptions.KillWhenAlive.Instance),
+            Endpoint = result.GetValue(DownloadOptions.Endpoint.Instance)!,
+            OutputPath = result.GetValue(DownloadOptions.Output.Instance),
+            Watch = result.GetValue(DownloadOptions.Watch.Instance),
+            Remove = result.GetValue(DownloadOptions.Remove.Instance),
+            KillWhenAlive = result.GetValue(DownloadOptions.KillWhenAlive.Instance),
         };
     }
 
@@ -45,11 +44,13 @@ public static class DownloadOptions
     {
         public static Endpoint Instance { get; } = new();
 
-        private Endpoint() : base("--endpoint", "The endpoint to download from")
+        private Endpoint() : base("--endpoint", "-e")
         {
-            AddAlias("-e");
-            IsRequired = true;
+            Description = "URL of the CANServer device to download from (e.g. http://192.168.4.1)";
+            HelpName = "URL";
+            Required = true;
             Arity = ArgumentArity.ExactlyOne;
+            CustomParser = OptionParsers.UriParser;
         }
     }
 
@@ -57,10 +58,11 @@ public static class DownloadOptions
     {
         public static Output Instance { get; } = new();
 
-        private Output() : base("--output", "The directory to download to")
+        private Output() : base("--output", "-o")
         {
-            AddAlias("-o");
-            IsRequired = true;
+            Description = "Local directory where downloaded log files will be saved";
+            HelpName = "DIR";
+            Required = true;
             Arity = ArgumentArity.ExactlyOne;
         }
     }
@@ -69,11 +71,11 @@ public static class DownloadOptions
     {
         public static Watch Instance { get; } = new();
 
-        private Watch() : base("--watch", "The interval to watch for new files")
+        private Watch() : base("--watch", "-w")
         {
-            AddAlias("-w");
-            IsRequired = false;
-            SetDefaultValue(60);
+            Description = "Poll interval in seconds to check for new files. Set to 0 for a single pass without polling";
+            HelpName = "SECONDS";
+            DefaultValueFactory = _ => 60;
         }
     }
 
@@ -81,11 +83,10 @@ public static class DownloadOptions
     {
         public static Remove Instance { get; } = new();
 
-        private Remove() : base("--remove", "Remove downloaded files after successful download")
+        private Remove() : base("--remove", "--rm")
         {
-            AddAlias("--rm");
-            SetDefaultValue(false);
-            IsRequired = false;
+            Description = "Delete log files from the CANServer device after they have been successfully downloaded";
+            DefaultValueFactory = _ => false;
         }
     }
 
@@ -93,10 +94,10 @@ public static class DownloadOptions
     {
         public static KillWhenAlive Instance { get; } = new();
 
-        private KillWhenAlive() : base("--killWhenAlive", "Kill the process when the server is still alive")
+        private KillWhenAlive() : base("--kill")
         {
-            SetDefaultValue(false);
-            IsRequired = false;
+            Description = "Exit the process when the CANServer device is detected as active (bus traffic present). Useful for one-shot downloads before the device starts logging again";
+            DefaultValueFactory = _ => false;
         }
     }
 }
