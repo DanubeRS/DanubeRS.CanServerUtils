@@ -26,6 +26,15 @@ public delegate Task OnFileDownloaded(string file, ILogFileClient client);
 /// </summary>
 public class Downloader(ILogFileClient client, ILogger<Downloader> logger)
 {
+    private static readonly ResiliencePipeline<bool> IsAliveRetryPipeline = new ResiliencePipelineBuilder<bool>()
+        .AddRetry(new RetryStrategyOptions<bool>
+        {
+            Delay = TimeSpan.FromSeconds(1),
+            BackoffType = DelayBackoffType.Exponential,
+            ShouldHandle = arguments => ValueTask.FromResult(!arguments.Outcome.Result),
+        })
+        .Build();
+
     private readonly ResiliencePipeline<string?> _downloadPipeline = BuildDownloadPipeline(client, logger);
 
     public async Task<int> DownloadAllFiles(LogFileType type, bool deleteOnDownload = false,
@@ -166,7 +175,7 @@ public class Downloader(ILogFileClient client, ILogger<Downloader> logger)
                     }, client, cancellationToken);
 
                 if (archiveFile == null)
-                    throw new Exception("Unable to download file. Returned file was not the expected size");
+                    throw new DownloaderException($"Unable to download file. Expected size mismatch for {file.Name}");
 
 
                 onDownloaded?.Invoke(archiveFile, client);
@@ -230,13 +239,7 @@ public class Downloader(ILogFileClient client, ILogger<Downloader> logger)
                 logger.LogWarning("Server was unable to find the file, suggesting that it needs to be restarted");
                 logger.LogInformation("Restarting server. Attempt {Attempt}", args.AttemptNumber);
                 await client.ResetServer(args.Context.CancellationToken);
-                var isAliveLoop = new RetryStrategyOptions<bool>()
-                {
-                    Delay = TimeSpan.FromSeconds(1),
-                    BackoffType = DelayBackoffType.Exponential,
-                    ShouldHandle = arguments => ValueTask.FromResult(!arguments.Outcome.Result),
-                };
-                await new ResiliencePipelineBuilder<bool>().AddRetry(isAliveLoop).Build().ExecuteAsync(
+                await IsAliveRetryPipeline.ExecuteAsync(
                     async (clientState, token) => await clientState.GetIsAlive(token),
                     client,
                     args.Context.CancellationToken).ConfigureAwait(false);
@@ -249,7 +252,7 @@ public class Downloader(ILogFileClient client, ILogger<Downloader> logger)
         {
             ShouldHandle = new PredicateBuilder<string?>().HandleResult(s => s == null),
             BackoffType = DelayBackoffType.Constant,
-            Delay = TimeSpan.Zero,
+            Delay = TimeSpan.FromSeconds(2),
             MaxRetryAttempts = 3,
             OnRetry = ctx =>
             {
@@ -268,7 +271,7 @@ public class Downloader(ILogFileClient client, ILogger<Downloader> logger)
     }
 
 
-    private class DownloaderException(string message) : Exception(message)
+    public class DownloaderException(string message) : Exception(message)
     {
     }
 }
