@@ -116,7 +116,7 @@ public static class DbcParser
         from unit in QuotedString
         from reciever in Identifier
         select new Signal(signalName, 
-            signalName == "M" ? new Multiplex(true, null) : multiplexDesignator, 
+            multiplexDesignator ?? (signalName == "M" ? new Multiplex(true, null) : null), 
             startBit, signalSize, order, valueType,
             factor, offset, min, max, unit, reciever);
 
