@@ -1,21 +1,18 @@
 using System.Text;
+using DanubeRS.CANServer.Lib.Downloader;
 using Microsoft.Extensions.Logging;
 
 namespace DanubeRS.CANServer.Lib.BinaryLogs;
 
-public class Reader : IAsyncDisposable
-    {
-        private readonly Stream _stream;
-        private readonly ILogger _logger;
-        private uint _logVersion = 0;
-        private ulong _lastSyncTime = 0L;
+public class Reader : IAsyncDisposable, IDisposable
+{
+    private readonly Stream _stream;
+    private readonly ILogger _logger;
+    private uint _logVersion = 0;
+    private ulong _lastSyncTime = 0L;
+    private bool _disposed = false;
 
-        //Buffers
-        private byte[] _timeSyncBuffer = new byte[8];
-        private byte[] _frameDataBuffer = new byte[5];
-        private bool _disposed = false;
-
-        public static async Task<Reader?> Open(Stream stream, ILogger logger)
+    public static async Task<Reader?> Open(Stream stream, ILogger logger)
     {
         var reader = new Reader(stream, logger);
         return await reader.Initialise() ? reader : null;
@@ -27,59 +24,59 @@ public class Reader : IAsyncDisposable
         _logger = logger;
     }
 
-    const int HeaderSize = 22;
-    private const string v1Header = "CANSERVER_v2_CANSERVER";
-    private const string v2Header = "CANSERVER_v3_CANSERVER";
+    private const int HeaderSize = 22;
+    private const string Version1Header = "CANSERVER_v2_CANSERVER";
+    private const string Version2Header = "CANSERVER_v3_CANSERVER";
 
     private async Task<bool> Initialise()
     {
         _stream.Seek(0, SeekOrigin.Begin);
-        // Validate Header
         var header = new byte[HeaderSize];
         if (await _stream.ReadAsync(header) != HeaderSize)
             return false;
         var logVersion = LogVersionFromBuffer(header);
-        // Log version required at start
         if (logVersion == 0)
             return false;
         _logVersion = logVersion;
         return true;
     }
 
-    private uint LogVersionFromBuffer(byte[] header)
+    private static uint LogVersionFromBuffer(ReadOnlySpan<byte> header)
     {
         return Encoding.ASCII.GetString(header) switch
         {
-            v1Header => 1,
-            v2Header => 2,
+            Version1Header => 1,
+            Version2Header => 2,
             _ => 0,
         };
     }
 
     public LogReaderFrame? GetNextFrame()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
         while (true)
         {
             var frameStart = _stream.ReadByte();
             switch (frameStart)
             {
-                // EOF
-                case -1: return null;
-                // Split; check for new header in the case of a merged file
+                case -1:
+                    return null;
                 case 0x43:
-                    var remainingBuffer = new byte[22];
-                    remainingBuffer[0] = (byte)frameStart;
-                    var read = _stream.Read(remainingBuffer, 1, 21);
-                    if (read != 21) throw new InvalidFrameException("Invalid Frame", _stream.Position);
-                    var logVersion = LogVersionFromBuffer(remainingBuffer);
-                    // No valid header found, so go back
+                    Span<byte> splitHeader = stackalloc byte[HeaderSize];
+                    splitHeader[0] = (byte)frameStart;
+                    var read = _stream.Read(splitHeader[1..]);
+                    if (read != HeaderSize - 1)
+                        throw new InvalidFrameException("Invalid split header", _stream.Position);
+                    var logVersion = LogVersionFromBuffer(splitHeader);
                     if (logVersion == 0)
                     {
-                        _stream.Seek(-21, SeekOrigin.Current);
+                        _stream.Seek(-(HeaderSize - 1), SeekOrigin.Current);
                         continue;
                     }
-
                     _logVersion = logVersion;
+                    break;
+                default:
                     break;
             }
 
@@ -87,40 +84,36 @@ public class Reader : IAsyncDisposable
             {
                 case 1: return ReadV1Frame((byte)frameStart);
                 case 2: return ReadV2Frame((byte)frameStart);
+                default: return null;
             }
         }
     }
 
     private LogReaderFrame? ReadV2Frame(byte start)
     {
+        Span<byte> timeSyncBuffer = stackalloc byte[8];
+        Span<byte> frameDataBuffer = stackalloc byte[5];
+
         while (true)
         {
-            // Time sync frame
             if (start == 0xA0)
             {
-                _stream.ReadExactly(_timeSyncBuffer, 0, 8);
-                _lastSyncTime = BitConverter.ToUInt64(_timeSyncBuffer, 0);
+                _stream.ReadExactly(timeSyncBuffer);
+                _lastSyncTime = BitConverter.ToUInt64(timeSyncBuffer);
             }
-            // CAN Frame
             else if ((start & 0b11110000) == 0xB0)
             {
-                var headerRead = _stream.Read(_frameDataBuffer, 0, 5);
+                var headerRead = _stream.Read(frameDataBuffer);
                 if (headerRead != 5) return null;
 
-                var frameTimeOffset = (start & 0x0F) + (_frameDataBuffer[0] << 4) + (_frameDataBuffer[1] << 12) +
-                                      (((_frameDataBuffer[2] & 0xF8) >> 3) << 20);
+                var frameTimeOffset = (start & 0x0F) + (frameDataBuffer[0] << 4) + (frameDataBuffer[1] << 12) +
+                                      (((frameDataBuffer[2] & 0xF8) >> 3) << 20);
                 var frameTime = _lastSyncTime + (ulong)frameTimeOffset;
 
-                var frameId = (((_frameDataBuffer[2]) & 0x07) << 8) + (_frameDataBuffer[3] & 0xFF);
-                var frameLength = _frameDataBuffer[4] & 0x0F;
-                frameLength = frameLength switch
-                {
-                    < 0 => 0,
-                    > 8 => 8,
-                    _ => frameLength
-                };
+                var frameId = ((frameDataBuffer[2] & 0x07) << 8) + (frameDataBuffer[3] & 0xFF);
+                byte frameLength = (byte)Math.Clamp(frameDataBuffer[4] & 0x0F, 0, 8);
 
-                var busId = (_frameDataBuffer[4] & 0xF0) >> 4;
+                var busId = (frameDataBuffer[4] & 0xF0) >> 4;
                 var framePayload = new byte[frameLength];
                 var read = _stream.Read(framePayload);
                 if (read != frameLength)
@@ -131,7 +124,7 @@ public class Reader : IAsyncDisposable
             }
             else
             {
-                _logger.LogDebug("Skipping frame {byte:x8}", start & 0b11110000);
+                _logger.LogDebug("Skipping unknown v2 frame byte 0x{Byte:X2}", start);
             }
 
             var nextStart = _stream.ReadByte();
@@ -141,65 +134,71 @@ public class Reader : IAsyncDisposable
         }
     }
 
- private LogReaderFrame? ReadV1Frame(byte start)
+    private LogReaderFrame? ReadV1Frame(byte start)
+    {
+        Span<byte> timeSyncBuffer = stackalloc byte[8];
+        Span<byte> frameDataBuffer = stackalloc byte[5];
+
+        while (true)
         {
-            while (true)
+            switch (start)
             {
-                switch (start)
-                {
-                    // Mark
-                    case 0xcd:
-                        throw new NotImplementedException("Marks not supported (yet)");
-                    // Time sync
-                    case 0xce:
-                        try
-                        {
-                            _stream.ReadExactly(_timeSyncBuffer, 0, 8);
-                        }
-                        catch (EndOfStreamException e)
-                        {
-                            throw new InvalidFrameException("Time sync payload is the wrong length", _stream.Position, e);
-                        }
+                case 0xcd:
+                    throw new NotImplementedException("Marks not supported (yet)");
+                case 0xce:
+                    try
+                    {
+                        _stream.ReadExactly(timeSyncBuffer);
+                    }
+                    catch (EndOfStreamException e)
+                    {
+                        throw new InvalidFrameException("Time sync payload is the wrong length", _stream.Position, e);
+                    }
 
-                        _lastSyncTime = BitConverter.ToUInt64(_timeSyncBuffer);
-                        start = (byte)_stream.ReadByte();
-                        break;
-                    // Regular payload
-                    case 0xcf:
-                        _stream.ReadExactly(_frameDataBuffer, 0, 5);
-                        var frameTimeOffset =
-                            BitConverter.ToUInt16(
-                                _frameDataBuffer, 0) * 1000;
+                    _lastSyncTime = BitConverter.ToUInt64(timeSyncBuffer);
+                    var nextByte = _stream.ReadByte();
+                    if (nextByte == -1) return null;
+                    start = (byte)nextByte;
+                    break;
+                case 0xcf:
+                    _stream.ReadExactly(frameDataBuffer);
+                    var frameTimeOffset =
+                        BitConverter.ToUInt16(frameDataBuffer) * 1000;
 
-                        var frameTime = _lastSyncTime + (ulong)frameTimeOffset;
+                    var frameTime = _lastSyncTime + (ulong)frameTimeOffset;
 
-                        var frameId = BitConverter.ToUInt16(_frameDataBuffer, 2);
-                        // Length & Bus stored in same byte
-                        var frameLength = _frameDataBuffer[4] & 0x0f;
-                        var busId = (_frameDataBuffer[4] & 0xf0) >> 4;
+                    var frameId = BitConverter.ToUInt16(frameDataBuffer[2..]);
+                    byte frameLength = (byte)Math.Clamp(frameDataBuffer[4] & 0x0F, 0, 8);
+                    var busId = (frameDataBuffer[4] & 0xF0) >> 4;
 
-                        frameLength = frameLength switch
-                        {
-                            < 0 => 0,
-                            > 8 => 8,
-                            _ => frameLength
-                        };
-
-                        var framePayload = new byte[frameLength];
-                        _stream.ReadExactly(framePayload);
-                        return new LogReaderFrame(frameTime, frameId, (uint)busId, framePayload);
-                }
+                    var framePayload = new byte[frameLength];
+                    _stream.ReadExactly(framePayload);
+                    return new LogReaderFrame(frameTime, frameId, (uint)busId, framePayload);
+                default:
+                    _logger.LogDebug("Skipping unknown v1 frame byte 0x{Byte:X2}", start);
+                    var next = _stream.ReadByte();
+                    if (next == -1) return null;
+                    start = (byte)next;
+                    break;
             }
-        }
-
-        public async ValueTask DisposeAsync()
-        {
-            if (_disposed) return;
-            _disposed = true;
-            await _stream.DisposeAsync();
         }
     }
 
-public record LogReaderFrame(ulong FrameTime, uint FrameId, uint BusId, byte[] FramePayload)
-{
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        GC.SuppressFinalize(this);
+        await _stream.DisposeAsync();
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        GC.SuppressFinalize(this);
+        _stream.Dispose();
+    }
 }
+
+public record LogReaderFrame(ulong FrameTime, uint FrameId, uint BusId, byte[] FramePayload);
