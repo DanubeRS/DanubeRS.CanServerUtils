@@ -22,23 +22,10 @@ public sealed class CanLogUploadPipeline(
     RateLimitConfig? rateLimitConfig = null)
 {
     private readonly ConcurrentBag<DecodeError> _decodeErrors = new();
-    private long _totalFramesProcessed;
     private long _totalPointsUploaded;
-    private readonly SignalRateLimiter? _rateLimiter;
+    private readonly SignalRateLimiter? _rateLimiter = rateLimitConfig != null ? new(new RateLimitResolver(rateLimitConfig)) : null;
 
     internal IReadOnlyCollection<DecodeError> Errors => _decodeErrors;
-
-    public CanLogUploadPipeline(
-        Database database,
-        WriteApiAsync writeApiAsync,
-        string bucket,
-        string org,
-        uint[]? signalFilter,
-        int batchSize,
-        ILogger<CanLogUploadPipeline> logger)
-        : this(database, writeApiAsync, bucket, org, signalFilter, batchSize, logger, null)
-    {
-    }
 
     public async Task ProcessFilesAsync(IEnumerable<FileInfo> files, CancellationToken cancellationToken)
     {
@@ -91,8 +78,8 @@ public sealed class CanLogUploadPipeline(
 
         totalStopwatch.Stop();
         
-        logger.LogInformation("Processed {frames} frames in {elapsed}", 
-            Interlocked.Read(ref _totalFramesProcessed), totalStopwatch.Elapsed.TotalSeconds);
+        logger.LogInformation("Processed {points} points in {elapsed}", 
+            Interlocked.Read(ref _totalPointsUploaded), totalStopwatch.Elapsed.TotalSeconds);
         logger.LogInformation("Processed {points} points in {elapsed} ({pointsSec}/sec)", 
             Interlocked.Read(ref _totalPointsUploaded), totalStopwatch.Elapsed.TotalSeconds,
             (double)Interlocked.Read(ref _totalPointsUploaded) / totalStopwatch.Elapsed.TotalSeconds);
@@ -197,7 +184,12 @@ public sealed class CanLogUploadPipeline(
             
             foreach (var signal in msg.Value.Signals)
             {
-                var signalDfn = msg.Defn.Signals.First(s => s.Signal.Name == signal.SignalName);
+                var signalDfn = msg.Defn.Signals.FirstOrDefault(s => s.Signal.Name == signal.SignalName);
+                if (signalDfn == null)
+                {
+                    logger.LogWarning("Signal definition not found for {SignalName} in message {MessageName}", signal.SignalName, msg.Defn.Header.Name);
+                    continue;
+                }
                 
                 var tags = new Dictionary<string, string>
                 {
@@ -259,7 +251,6 @@ public sealed class CanLogUploadPipeline(
     private ActionBlock<IEnumerable<PointData>> CreateUploaderBlock(WriteApiAsync writeApiAsync, string bucket, string org)
     {
         var pointsStopwatch = Stopwatch.StartNew();
-        long pointsUploaded = 0;
 
         return new ActionBlock<IEnumerable<PointData>>(async batch =>
         {
@@ -268,11 +259,12 @@ public sealed class CanLogUploadPipeline(
             rqStop.Stop();
 
             var currentPoints = batch.Count();
-            Interlocked.Add(ref pointsUploaded, currentPoints);
+            Interlocked.Add(ref _totalPointsUploaded, (int)currentPoints);
+            var totalUploaded = Interlocked.Read(ref _totalPointsUploaded);
 
             logger.LogDebug("Processed {points} points ({pointsSec}/sec) (RQ: {RequestSec})", 
-                pointsUploaded,
-                pointsUploaded / pointsStopwatch.Elapsed.TotalSeconds, 
+                totalUploaded,
+                totalUploaded / pointsStopwatch.Elapsed.TotalSeconds, 
                 rqStop.Elapsed.TotalSeconds);
             
             pointsStopwatch.Restart();

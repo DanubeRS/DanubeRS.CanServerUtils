@@ -26,7 +26,7 @@ public class LogFileClient(HttpClient client) : IAsyncDisposable, ILogFileClient
 {
     private const string Cont = "---cont---";
     
-    private readonly ResiliencePipeline<object> _httpPipeline = BuildHttpPipeline();
+    private static readonly ResiliencePipeline<object> HttpPipeline = BuildHttpPipeline();
 
      public async ValueTask DisposeAsync()
     {
@@ -86,8 +86,10 @@ public class LogFileClient(HttpClient client) : IAsyncDisposable, ILogFileClient
 
     public async Task GetLogFileData(LogFileRecord record, Stream target, CancellationToken cancellationToken = default)
     {
-        var logFiles = await client.GetStreamAsync("/logs/files/download?id=" + record.Name, cancellationToken);
-        await logFiles.CopyToAsync(target, cancellationToken);
+        var response = await client.GetAsync("/logs/files/download?id=" + Uri.EscapeDataString(record.Name), cancellationToken);
+        response.EnsureSuccessStatusCode();
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await stream.CopyToAsync(target, cancellationToken);
     }
 
     public async Task<bool> GetIsAlive(CancellationToken cancellationToken = default)
@@ -105,8 +107,9 @@ public class LogFileClient(HttpClient client) : IAsyncDisposable, ILogFileClient
 
     public async Task DeleteFile(LogFileRecord file, CancellationToken cancellationToken = default)
     {
-        await client.PostAsync($"/logs/files/delete",
+        var response = await client.PostAsync($"/logs/files/delete",
             new FormUrlEncodedContent([new KeyValuePair<string, string>("id", file.Name)]), cancellationToken);
+        response.EnsureSuccessStatusCode();
     }
 
     public async Task ResetServer(CancellationToken cancellationToken = default)

@@ -26,36 +26,47 @@ public class UploadCommandHandler(
         var watchInterval = parseResult.GetValue(UploadOptions.WatchInterval.Instance);
         var signals = parseResult.GetValue(UploadOptions.Signals.Instance);
 
-        var influxClient = InfluxWriteClientFactory(uploadOptions.InfluxDb);
-        var database = await databaseFactory(uploadOptions.Databases ?? []);
-        while (!cancellationToken.IsCancellationRequested)
+        var influxDbOptions = uploadOptions.InfluxDb;
+        var influxClient = new InfluxDBClient(influxDbOptions.Endpoint.ToString(), influxDbOptions.Token);
+        if (!influxDbOptions.Compress)
+            influxClient.DisableGzip();
+        try
         {
-            var inputDir = inputPath ?? new DirectoryInfo(Directory.GetCurrentDirectory());
-            var files = inputDir.EnumerateFiles("*.log").OrderBy(f => f.Name);
-
-            foreach (var file in files)
+            var writeApi = influxClient.GetWriteApiAsync();
+            var database = await databaseFactory(uploadOptions.Databases ?? []);
+            while (!cancellationToken.IsCancellationRequested)
             {
-                await ParseFileInternal(file, database, influxClient, uploadOptions);
-                if (archiveDirectory != null)
-                    file.MoveTo(Path.Combine(archiveDirectory.FullName, file.Name));
+                var inputDir = inputPath ?? new DirectoryInfo(Directory.GetCurrentDirectory());
+                var files = inputDir.EnumerateFiles("*.log").OrderBy(f => f.Name);
+
+                foreach (var file in files)
+                {
+                    try
+                    {
+                        await ParseFileInternal(file, database, writeApi, uploadOptions);
+                        if (archiveDirectory != null)
+                            file.MoveTo(Path.Combine(archiveDirectory.FullName, file.Name));
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Failed to process file {FileName}", file.Name);
+                    }
+                }
+
+                if (watchInterval <= 0) return 0;
+
+                logger.LogInformation("Parsing is watching, delay {Seconds} before next loop...", watchInterval);
+                await Task.Delay(TimeSpan.FromSeconds(watchInterval), cancellationToken);
             }
 
-            if (watchInterval <= 0) return 0;
-
-            logger.LogInformation("Parsing is watching, delay {Seconds} before next loop...", watchInterval);
-            await Task.Delay(TimeSpan.FromSeconds(watchInterval), cancellationToken);
+            return 0;
         }
-
-        return 0;
+        finally
+        {
+            influxClient.Dispose();
+        }
     }
 
-    private WriteApiAsync InfluxWriteClientFactory(InfluxDbOptionsValues options)
-    {
-        var influxClient = new InfluxDBClient(options.Endpoint.ToString(), options.Token);
-        if (!options.Compress)
-            influxClient.DisableGzip();
-        return influxClient.GetWriteApiAsync();
-    }
 
     private async Task ParseFileInternal(FileInfo fileInfo,
         Database database, WriteApiAsync writeApiAsync, UploadOptionsValues uploadOptions)

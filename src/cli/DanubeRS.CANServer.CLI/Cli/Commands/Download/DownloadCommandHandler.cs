@@ -8,6 +8,7 @@ namespace DanubeRS.CANServer.CLI.Commands.Download;
 public class DownloadCommandHandler(DownloaderFactory downloaderFactory, ILogger<DownloadCommandHandler> logger)
     : ICommandAction
 {
+    private const int MaxConsecutiveErrors = 5;
     private const int FileCountThreshold = 1;
 
     public async Task<int> InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
@@ -15,6 +16,7 @@ public class DownloadCommandHandler(DownloaderFactory downloaderFactory, ILogger
         var options = DownloadOptionValues.Parse(parseResult);
         var downloader = downloaderFactory(options.Endpoint);
 
+        var consecutiveErrors = 0;
         while (!cancellationToken.IsCancellationRequested)
         {
             try
@@ -25,10 +27,17 @@ public class DownloadCommandHandler(DownloaderFactory downloaderFactory, ILogger
                     async (_, client) =>
                         new(false, options.KillWhenAlive && await BusIsActive(client, cancellationToken)),
                     null, cancellationToken);
+                consecutiveErrors = 0;
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error occured in loop");
+                consecutiveErrors++;
+                logger.LogError(ex, "Error occurred in loop");
+                if (consecutiveErrors >= MaxConsecutiveErrors)
+                {
+                    logger.LogError("Exceeded {MaxErrors} consecutive errors, exiting", MaxConsecutiveErrors);
+                    return 1;
+                }
             }
 
             if (options.Watch <= 0)
@@ -58,6 +67,7 @@ public class DownloadCommandHandler(DownloaderFactory downloaderFactory, ILogger
         return true;
     }
 
+    // Note: This method has a side effect — it re-enables logging if the bus is active but logging was disabled
     async Task<bool> BusIsActive(ILogFileClient client, CancellationToken cancellationToken)
     {
         var stats = await client.GetStats(cancellationToken);
