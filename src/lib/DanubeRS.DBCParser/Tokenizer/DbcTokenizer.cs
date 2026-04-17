@@ -17,9 +17,8 @@ public static class DbcTokenizer
 
     public static Tokenizer<DbcTokens> Instance =>
         new TokenizerBuilder<DbcTokens>()
-            .Match(Span.Regex("[\n]{2,}"), DbcTokens.DefinitionEnd)
-            .Match(Span.Regex("(\r\n){2,}"), DbcTokens.DefinitionEnd)
-            .Match(Span.Regex(@"([-+]?[0-9]*\.?[0-9])+[eE]([-+]?[0-9]+)?"), DbcTokens.Sci)
+            .Match(Span.Regex(@"(\r?\n){2,}"), DbcTokens.DefinitionEnd)
+            .Match(Span.Regex(@"[-+]?[0-9]+(?:\.[0-9]+)?[eE][-+]?[0-9]+"), DbcTokens.Sci)
             .Match(Numerics.DecimalDouble, DbcTokens.Double)
             .Match(Numerics.Integer, DbcTokens.Integer)
             .Match(StringValue, DbcTokens.String)

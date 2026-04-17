@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using DanubeRS.CanServerUtils.Lib.Parser;
 using DanubeRS.CanServerUtils.Lib.Tokenizer;
+using DanubeRS.DBCParser;
 using Microsoft.Extensions.Logging;
 using ValueType = DanubeRS.CanServerUtils.Lib.Parser.ValueType;
 
@@ -16,7 +17,7 @@ public class Database(ILogger<Database> logger)
         public string[] Comments { get; } = [];
 
         public IReadOnlyDictionary<uint, string>? ValueLookup { get; } = db.ValueDescriptions
-            .SingleOrDefault(v => v.MessageId == message.Header.Id && v.SignalName == signal.Name)?.Values;
+            .FirstOrDefault(v => v.MessageId == message.Header.Id && v.SignalName == signal.Name)?.Values;
     }
 
     public class MessageDefinition
@@ -43,7 +44,6 @@ public class Database(ILogger<Database> logger)
     }
 
     private readonly Dictionary<uint, MessageDefinition> _messageDefn = new();
-    private readonly byte[] _signalValueBytes = new byte[8];
 
     public void AddFile(TextReader reader)
     {
@@ -51,6 +51,13 @@ public class Database(ILogger<Database> logger)
         var dbcString = reader.ReadToEnd();
         var tokens = tokenizer.Tokenize(dbcString);
         var parsed = DbcParser.Database(tokens);
+
+        if (!parsed.HasValue)
+            throw new DbcParseException(parsed.ErrorMessage != null
+                ? [parsed.ErrorMessage]
+                : parsed.Expectations != null
+                    ? parsed.Expectations
+                    : ["Unknown parse error"]);
 
         StoreParsedResult(parsed.Value);
     }
@@ -63,6 +70,13 @@ public class Database(ILogger<Database> logger)
         var tokenizer = DbcTokenizer.Instance;
         var tokens = tokenizer.Tokenize(dbcString);
         var parsed = DbcParser.Database(tokens);
+
+        if (!parsed.HasValue)
+            throw new DbcParseException(parsed.ErrorMessage != null
+                ? [parsed.ErrorMessage]
+                : parsed.Expectations != null
+                    ? parsed.Expectations
+                    : ["Unknown parse error"]);
 
         StoreParsedResult(parsed.Value);
     }
@@ -93,7 +107,8 @@ public class Database(ILogger<Database> logger)
 
         var bitArray = new BitArray(data);
         if (logger.IsEnabled(LogLevel.Trace))
-            logger.LogTrace("Data\n{BitArrayData}", GetBitArrayDataForLog(bitArray));
+            logger.LogTrace("Frame 0x{FrameId:X3} ({MessageName}) Data\n{BitArrayData}",
+                defn.Header.Id, defn.Header.Name, GetBitArrayDataForLog(bitArray));
 
         return defn.IsMultiplexed switch
         {
@@ -107,7 +122,6 @@ public class Database(ILogger<Database> logger)
         value = null;
         if (defn.Signals.Count == 0) return true;
         var lastSignal = defn.Signals.OrderByDescending(s => s.Signal.StartBit).First();
-        // Message size is incompatable
         if (lastSignal.Signal.StartBit + lastSignal.Signal.Size > data.Length) return false;
 
         value = new MessageValue(defn.Header.Id, defn.Header.Name,
@@ -118,24 +132,24 @@ public class Database(ILogger<Database> logger)
 
     private SignalValue GetSignalValue(BitArray data, SignalDefinition signal)
     {
-        Array.Clear(_signalValueBytes);
+        Span<byte> signalValueBytes = stackalloc byte[8];
 
         switch (signal.Signal.Order)
         {
             case Endianness.Little:
-                ExtractBitsLittleEndian(data, signal.Signal.StartBit, signal.Signal.Size, _signalValueBytes);
+                ExtractBitsLittleEndian(data, signal.Signal.StartBit, signal.Signal.Size, signalValueBytes);
                 break;
             case Endianness.Big:
-                ExtractBitsBigEndian(data, signal.Signal.StartBit, signal.Signal.Size, _signalValueBytes);
+                ExtractBitsBigEndian(data, signal.Signal.StartBit, signal.Signal.Size, signalValueBytes);
                 break;
         }
 
         long rawValue;
         if (signal.Signal.ValueType == ValueType.Unsigned)
-            rawValue = (long)BitConverter.ToUInt64(_signalValueBytes, 0);
+            rawValue = (long)BitConverter.ToUInt64(signalValueBytes);
         else
         {
-            var valueAsInt64 = BitConverter.ToInt64(_signalValueBytes, 0);
+            var valueAsInt64 = BitConverter.ToInt64(signalValueBytes);
             var shiftAmount = 64 - signal.Signal.Size;
             rawValue = (valueAsInt64 << shiftAmount) >> shiftAmount;
         }
@@ -143,33 +157,28 @@ public class Database(ILogger<Database> logger)
         return new SignalValue(signal.Signal.Name, signal.Signal.Offset + rawValue * signal.Signal.Factor);
     }
 
-    private static void ExtractBitsLittleEndian(BitArray bitArray, int startBit, int signalSize, byte[] outputBytes)
+    private static void ExtractBitsLittleEndian(BitArray bitArray, int startBit, int signalSize, Span<byte> outputBytes)
     {
         ulong value = 0;
 
-        for (int i = 0; i < signalSize && (startBit + i) / 8 < bitArray.Count; i++)
+        for (int i = 0; i < signalSize && startBit + i < bitArray.Length; i++)
         {
             if (bitArray[startBit + i])
-                value |= (ulong)(1UL << i); // First extracted bit is LSB for little-endian
+                value |= (1UL << i);
         }
 
         for (int i = 0; i < Math.Min((signalSize + 7) / 8, outputBytes.Length); i++)
             outputBytes[i] = (byte)((value >> (i * 8)) & 0xFF);
     }
 
-     private static void ExtractBitsBigEndian(BitArray bitArray, int startBit, int signalSize, byte[] outputBytes)
+    private static void ExtractBitsBigEndian(BitArray bitArray, int startBit, int signalSize, Span<byte> outputBytes)
     {
         ulong value = 0;
 
-        for (int i = 0; i < signalSize && (startBit + i) / 8 < bitArray.Count; i++)
+        for (int i = 0; i < signalSize && startBit + i < bitArray.Length; i++)
         {
-            int frameBitPos = startBit + i;
-            int sourceByteIdx = frameBitPos / 8;
-            int sourceBitInByte = frameBitPos % 8;
-
-            // For big-endian, first extracted bit is MSB of signal value
-            if (bitArray[frameBitPos])
-                value |= (ulong)(1UL << (signalSize - 1 - i));
+            if (bitArray[startBit + i])
+                value |= (1UL << (signalSize - 1 - i));
         }
 
         for (int i = 0; i < Math.Min((signalSize + 7) / 8, outputBytes.Length); i++)
@@ -184,30 +193,30 @@ public class Database(ILogger<Database> logger)
         if (multiplexSignal == null)
             return false;
 
+        Span<byte> muxValueBytes = stackalloc byte[8];
+
         switch (multiplexSignal.Signal.Order)
         {
             case Endianness.Little:
-                ExtractBitsLittleEndian(data, multiplexSignal.Signal.StartBit, multiplexSignal.Signal.Size, _signalValueBytes);
+                ExtractBitsLittleEndian(data, multiplexSignal.Signal.StartBit, multiplexSignal.Signal.Size, muxValueBytes);
                 break;
             case Endianness.Big:
-                ExtractBitsBigEndian(data, multiplexSignal.Signal.StartBit, multiplexSignal.Signal.Size, _signalValueBytes);
+                ExtractBitsBigEndian(data, multiplexSignal.Signal.StartBit, multiplexSignal.Signal.Size, muxValueBytes);
                 break;
         }
         
-        // Extract mux value based on signal size (can be 8-64 bits)
         ulong rawSwitchValue;
         if (multiplexSignal.Signal.Size <= 8)
-            rawSwitchValue = _signalValueBytes[0];
+            rawSwitchValue = muxValueBytes[0];
         else if (multiplexSignal.Signal.Size <= 16)
-            rawSwitchValue = BitConverter.ToUInt16(_signalValueBytes);
+            rawSwitchValue = BitConverter.ToUInt16(muxValueBytes);
         else if (multiplexSignal.Signal.Size <= 32)
-            rawSwitchValue = BitConverter.ToUInt32(_signalValueBytes);
+            rawSwitchValue = BitConverter.ToUInt32(muxValueBytes);
         else
-            rawSwitchValue = BitConverter.ToUInt64(_signalValueBytes);
+            rawSwitchValue = BitConverter.ToUInt64(muxValueBytes);
 
         var switchValue = (uint)rawSwitchValue;
         
-        // Include: mux switch signal, always-present signals (no multiplex), and matching muxed signals  
         var filteredSignals = defn.Signals
             .Where(s => s.Signal.Multiplex?.IsSwitch == true 
                       || s.Signal.Multiplex == null 
@@ -220,7 +229,6 @@ public class Database(ILogger<Database> logger)
         var lastSignal = filteredSignals.OrderByDescending(s => s.Signal.StartBit).FirstOrDefault();
         if (lastSignal == null) return false;
 
-        // Message size is incompatible
         if (lastSignal.Signal.StartBit + lastSignal.Signal.Size > data.Length) return false;
 
         value = new MessageValue(defn.Header.Id, defn.Header.Name,
