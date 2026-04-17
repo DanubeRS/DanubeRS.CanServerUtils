@@ -15,6 +15,9 @@ public class UploadCommand : Command
         Options.Add(UploadOptions.Signals.Instance);
         Options.Add(UploadOptions.WatchInterval.Instance);
         Options.Add(UploadOptions.ArchivePath.Instance);
+        Options.Add(UploadOptions.BatchSize.Instance);
+        Options.Add(UploadOptions.RateLimitConfig.Instance);
+        Options.Add(UploadOptions.GlobalWindow.Instance);
         Options.Add(InfluxDbOptions.Endpoint.Instance);
         Options.Add(InfluxDbOptions.Org.Instance);
         Options.Add(InfluxDbOptions.Bucket.Instance);
@@ -34,6 +37,9 @@ public class UploadOptionsValues
             Signals = result.GetValue(UploadOptions.Signals.Instance),
             ArchivePath = result.GetValue(UploadOptions.ArchivePath.Instance),
             WatchInterval = result.GetValue(UploadOptions.WatchInterval.Instance),
+            BatchSize = result.GetValue(UploadOptions.BatchSize.Instance),
+            RateLimitConfig = result.GetValue(UploadOptions.RateLimitConfig.Instance),
+            GlobalWindow = result.GetValue(UploadOptions.GlobalWindow.Instance),
             InfluxDb = InfluxDbOptionsValues.Parse(result),
         };
     }
@@ -43,6 +49,9 @@ public class UploadOptionsValues
     public uint[]? Signals { get; private set; }
     public FileInfo? ArchivePath { get; private set; }
     public int? WatchInterval { get; private set; }
+    public int BatchSize { get; private set; } = 5000;
+    public FileInfo? RateLimitConfig { get; private set; }
+    public int? GlobalWindow { get; private set; }
     public InfluxDbOptionsValues InfluxDb { get; private set; } = null!;
 }
 
@@ -186,6 +195,40 @@ public static class UploadOptions
             HelpName = "FILE";
             Required = true;
             Arity = ArgumentArity.OneOrMore;
+        }
+    }
+
+    public sealed class BatchSize : Option<int>
+    {
+        public static BatchSize Instance { get; } = new();
+
+        private BatchSize() : base("--batch-size")
+        {
+            Description = "Number of points to batch before uploading to InfluxDB (default: 5000)";
+            HelpName = "COUNT";
+            DefaultValueFactory = _ => 5_000;
+        }
+    }
+
+    public sealed class RateLimitConfig : Option<FileInfo?>
+    {
+        public static RateLimitConfig Instance { get; } = new();
+
+        private RateLimitConfig() : base("--rate-limit-config")
+        {
+            Description = "YAML configuration file for rate limiting rules";
+            HelpName = "FILE";
+        }
+    }
+
+    public sealed class GlobalWindow : Option<int?>
+    {
+        public static GlobalWindow Instance { get; } = new();
+
+        private GlobalWindow() : base("--global-window")
+        {
+            Description = "Global rate limit window in milliseconds (applies to all signals not explicitly configured)";
+            HelpName = "MILLISECONDS";
         }
     }
 }

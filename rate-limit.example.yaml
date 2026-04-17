@@ -1,0 +1,53 @@
+# Rate Limiting Configuration Example
+# This file configures per-signal rate limiting for CAN data uploads to InfluxDB.
+#
+# Usage: dotnet run --project src/cli/DanubeRS.CANServer.CLI/ \
+#   -- upload --input ./logs --dbc ~/Model3CAN.dbc \
+#          --rate-limit-config rate-limit.yaml \
+#          --influx-server https://... --influx-org myorg --influx-bucket can-data
+
+global:
+  # Default window size in milliseconds (200ms = upload every 200ms per signal)
+  windowMs: 200
+  # Aggregation mode when multiple values arrive within the window
+  # Options: mean, median, min, max, last (default if not specified)
+  aggregate: last
+
+frames:
+  # Frame-specific configuration by ID or name
+  - id: 512
+    # Override global defaults for this frame only
+    windowMs: 300
+    aggregate: mean
+    
+    # Per-signal overrides within this frame
+    signals:
+      - name: VehicleSpeed
+        # Update speed every 500ms with average value
+        windowMs: 500
+        aggregate: mean
+        
+      - name: EngineRPM
+        # RPM can change rapidly, use shorter window
+        windowMs: 100
+        aggregate: max
+
+  # Match by frame name from DBC file (if available)
+  - name: "WHEEL_SPEED_FRNT_LFT"
+    windowMs: 250
+    aggregate: last
+    
+    signals:
+      - name: WheelSpeed
+        windowMs: 250
+        aggregate: mean
+
+  # Ignore certain signals entirely (e.g., rapidly-changing noise)
+  - id: 1024
+    signals:
+      - name: SomeNoisySensor
+        ignore: true
+        
+      - name: ImportantSignal
+        windowMs: 1000
+        aggregate: median
