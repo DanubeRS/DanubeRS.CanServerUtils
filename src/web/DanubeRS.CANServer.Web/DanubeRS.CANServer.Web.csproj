@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\lib\DanubeRS.DBCParser\DanubeRS.DBCParser.csproj" />
+    <ProjectReference Include="..\..\lib\DanubeRS.CANServer.Lib\DanubeRS.CANServer.Lib.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DanubeRS.CANServer.Web.Tests" />
+  </ItemGroup>
+
+</Project>

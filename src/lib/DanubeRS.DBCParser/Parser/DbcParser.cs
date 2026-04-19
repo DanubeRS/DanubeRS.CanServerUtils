@@ -95,7 +95,7 @@ public static class DbcParser
     private static TokenListParser<DbcTokens, Signal> Signal { get; } =
         from sgKeyword in Token.EqualToValue(DbcTokens.Identifier, "SG_")
         from signalName in Identifier
-        from multiplexDesignator in Multiplexed.OptionalOrDefault()
+        from multiplexDesignator in Multiplex.OptionalOrDefault()
         from colon in Token.EqualTo(DbcTokens.Colon)
         from startBit in Integer
         from pipe in Token.EqualTo(DbcTokens.Pipe)
