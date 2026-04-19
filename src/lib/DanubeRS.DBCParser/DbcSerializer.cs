@@ -11,7 +11,7 @@ public static class DbcSerializer
     {
         var sb = new StringBuilder();
 
-        sb.AppendLine($"VERSION {db.Version.VersionString}");
+        sb.AppendLine($"VERSION \"{db.Version.VersionString}\"");
         sb.AppendLine();
         sb.AppendLine("NS_ : ");
         foreach (var ns in db.NewSymbols.NamespaceValues)
@@ -39,7 +39,7 @@ public static class DbcSerializer
                 };
                 var valueTypeIndicator = signal.ValueType == DbcValueType.Signed ? "-" : "+";
                 var endiannessIndicator = signal.Order == Endianness.Little ? "1" : "0";
-                sb.AppendLine($" SG_ {signal.Name}{multiplex} : {signal.StartBit}|{signal.Size}@{endiannessIndicator}{valueTypeIndicator} ({FormatDouble(signal.Factor)},{FormatDouble(signal.Offset)}) [{FormatDouble(signal.Min)}|{FormatDouble(signal.Max)}] {signal.Unit} {signal.Receiver}");
+                sb.AppendLine($" SG_ {signal.Name}{multiplex} : {signal.StartBit}|{signal.Size}@{endiannessIndicator}{valueTypeIndicator} ({FormatDouble(signal.Factor)},{FormatDouble(signal.Offset)}) [{FormatDouble(signal.Min)}|{FormatDouble(signal.Max)}] \"{signal.Unit}\" {signal.Receiver}");
             }
             sb.AppendLine();
         }
@@ -57,7 +57,7 @@ public static class DbcSerializer
                     "EV_" => "EV_ ",
                     _ => ""
                 };
-                sb.AppendLine($"BA_DEF_ {objectType}{attrDef.Name} {FormatAttributeValueType(attrDef.ValueType)}");
+                sb.AppendLine($"BA_DEF_ {objectType}\"{attrDef.Name}\" {FormatAttributeValueType(attrDef.ValueType)}");
             }
         }
 
@@ -66,7 +66,7 @@ public static class DbcSerializer
             sb.AppendLine();
             foreach (var attrDefault in db.AttributeDefaults ?? [])
             {
-                sb.AppendLine($"BA_DEF_DEF_ {attrDefault.AttributeName} {FormatAttributeDefaultValue(attrDefault.Value)};");
+                sb.AppendLine($"BA_DEF_DEF_ \"{attrDefault.AttributeName}\" {FormatAttributeDefaultValue(attrDefault.Value)};");
             }
         }
 
@@ -84,7 +84,7 @@ public static class DbcSerializer
                     EnvironmentObjectValue eov => $" EV_ {eov.Name}",
                     _ => ""
                 };
-                sb.AppendLine($"BA_ {attrValue.Name}{objectRef} {FormatAttributeDefaultValue(attrValue.Value.Value)};");
+                sb.AppendLine($"BA_ \"{attrValue.Name}\"{objectRef} {FormatAttributeDefaultValue(attrValue.Value.Value)};");
             }
         }
 
@@ -93,7 +93,7 @@ public static class DbcSerializer
             sb.AppendLine();
             foreach (var vd in db.ValueDescriptions ?? [])
             {
-                var values = string.Join(" ", vd.Values.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key} {kv.Value}"));
+                var values = string.Join(" ", vd.Values.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key} \"{kv.Value}\""));
                 sb.AppendLine($"VAL_ {vd.MessageId} {vd.SignalName} {values};");
             }
         }
@@ -128,7 +128,7 @@ public static class DbcSerializer
         {
             IntegerAttributeDefaultValue i => i.Value.ToString(CultureInfo.InvariantCulture),
             DoubleAttributeDefaultValue d => d.Value.ToString(CultureInfo.InvariantCulture),
-            StringAttributeDefaultValue s => s.Value,
+            StringAttributeDefaultValue s => $"\"{s.Value}\"",
             _ => ""
         };
     }

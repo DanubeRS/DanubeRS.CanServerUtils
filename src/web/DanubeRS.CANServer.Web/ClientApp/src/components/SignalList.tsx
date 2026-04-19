@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { Box, TextField, Typography, IconButton, Collapse, Button, Dialog, DialogTitle, DialogContent, DialogActions, Stack, ToggleButton, ToggleButtonGroup, Alert } from '@mui/material';
 import { ExpandMore, ExpandLess, UploadFile, Download, Delete, Add } from '@mui/icons-material';
 import { useDbcStore } from '../store';
+import { NumberFieldMUI } from './NumberFieldMUI';
 
 export function SignalList() {
   const { loaded, messages, selectedSignal, selectSignal, loadDbc, removeMessage, exportDbc, loading, addMessage } = useDbcStore();
@@ -228,12 +229,12 @@ function AddSignalDialog({ open, frameId, messageName, onClose }: { open: boolea
         <Stack spacing={1.5} sx={{ mt: 1 }}>
           <TextField label="Name" size="small" value={name} onChange={e => setName(e.target.value)} autoFocus />
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-            <TextField label="Start Bit" type="number" size="small" value={startBit} onChange={e => setStartBit(Number(e.target.value))} />
-            <TextField label="Size" type="number" size="small" value={size} onChange={e => setSize(Number(e.target.value))} />
-            <TextField label="Factor" type="number" size="small" value={factor} onChange={e => setFactor(Number(e.target.value))} />
-            <TextField label="Offset" type="number" size="small" value={offset} onChange={e => setOffset(Number(e.target.value))} />
-            <TextField label="Min" type="number" size="small" value={min} onChange={e => setMin(Number(e.target.value))} />
-            <TextField label="Max" type="number" size="small" value={max} onChange={e => setMax(Number(e.target.value))} />
+            <NumberFieldMUI label="Start Bit" value={startBit} onChange={setStartBit} min={0} step={1} />
+          <NumberFieldMUI label="Size (bits)" value={size} onChange={setSize} min={1} step={1} />
+          <NumberFieldMUI label="Factor" value={factor} onChange={setFactor} step={0.01} />
+          <NumberFieldMUI label="Offset" value={offset} onChange={setOffset} step={0.01} />
+          <NumberFieldMUI label="Min" value={min} onChange={setMin} step={0.01} />
+          <NumberFieldMUI label="Max" value={max} onChange={setMax} step={0.01} />
           </Box>
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
             <ToggleButtonGroup size="small" exclusive value={order} onChange={(_, val) => val && setOrder(val)}>
@@ -256,7 +257,7 @@ function AddSignalDialog({ open, frameId, messageName, onClose }: { open: boolea
                 <ToggleButton value="multiplexed">Mux</ToggleButton>
               </ToggleButtonGroup>
               {multiplexMode === 'multiplexed' && (
-                <TextField label="Switch Value" type="number" size="small" value={switchValue} onChange={e => setSwitchValue(Number(e.target.value))} sx={{ width: 120 }} />
+                <NumberFieldMUI label="Switch Value" value={switchValue} onChange={setSwitchValue} min={0} step={1} />
               )}
             </Box>
           </Box>

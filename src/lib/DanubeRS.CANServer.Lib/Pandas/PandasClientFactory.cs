@@ -28,6 +28,14 @@ public class PandasClientFactory
         return instance;
     }
 
+    public Task<IPandasClientInstance> CreateAsyncNonBlocking(Action<PandasMessage> onMessageReceived,
+        CancellationToken cancellationToken = default)
+    {
+        var instance = new PandasClientInstance(_url, _port, _loggerFactory.CreateLogger<PandasClientInstance>());
+        instance.StartListeningNonBlocking(cancellationToken, onMessageReceived);
+        return Task.FromResult<IPandasClientInstance>(instance);
+    }
+
     private class PandasClientInstance : IPandasClientInstance
     {
         private readonly ILogger _logger;
@@ -51,6 +59,14 @@ public class PandasClientFactory
                 cancellationToken);
             // Don't return until the ACK is completed and true
             await _ackCompletionSource.Task;
+        }
+
+        public void StartListeningNonBlocking(CancellationToken cancellationToken, Action<PandasMessage> onMessageReceived)
+        {
+            _heartbeatTask = HeartbeatLoop(cancellationToken);
+            _listenLoop = ReceiveLoop(onMessageReceived, async () => await Track(_tracking.ToArray()),
+                cancellationToken);
+            // Return immediately without waiting for ACK
         }
 
         public async Task StopListening()

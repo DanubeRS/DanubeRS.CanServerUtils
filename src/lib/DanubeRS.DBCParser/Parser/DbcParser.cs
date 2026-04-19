@@ -90,7 +90,8 @@ public static class DbcParser
 
     private static TokenListParser<DbcTokens, string> QuotedString { get; } =
         Token.EqualTo(DbcTokens.String)
-            .Select(s => s.ToStringValue());
+            .Select(s => s.ToStringValue())
+            .Select(s => s.Length >= 2 && s.StartsWith('"') && s.EndsWith('"') ? s[1..^1] : s);
 
     private static TokenListParser<DbcTokens, Signal> Signal { get; } =
         from sgKeyword in Token.EqualToValue(DbcTokens.Identifier, "SG_")

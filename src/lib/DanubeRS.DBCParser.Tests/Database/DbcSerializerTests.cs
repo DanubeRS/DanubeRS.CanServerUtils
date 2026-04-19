@@ -158,9 +158,9 @@ public class DbcSerializerTests
         reparsed.ValueDescriptions.Length.Should().Be(1);
         reparsed.ValueDescriptions[0].MessageId.Should().Be(1u);
         reparsed.ValueDescriptions[0].SignalName.Should().Be("Status");
-        reparsed.ValueDescriptions[0].Values[0].Should().Be("\"Off\"");
-        reparsed.ValueDescriptions[0].Values[1].Should().Be("\"On\"");
-        reparsed.ValueDescriptions[0].Values[2].Should().Be("\"Fault\"");
+        reparsed.ValueDescriptions[0].Values[0].Should().Be("Off");
+        reparsed.ValueDescriptions[0].Values[1].Should().Be("On");
+        reparsed.ValueDescriptions[0].Values[2].Should().Be("Fault");
     }
 
     [Fact]

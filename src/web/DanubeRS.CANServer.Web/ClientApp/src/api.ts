@@ -215,3 +215,65 @@ export interface TimeSeriesPoint {
 export async function decodeSignalTimeSeries(frameId: number, signalName: string): Promise<TimeSeriesPoint[]> {
   return apiFetch<TimeSeriesPoint[]>(`/log/decode-signal?frameId=${frameId}&signalName=${encodeURIComponent(signalName)}`);
 }
+
+export interface PandasConnectRequest {
+  ip: string;
+  port: number;
+}
+
+export interface PandasStatusResponse {
+  connected: boolean;
+  ip: string | null;
+  port: number | null;
+}
+
+export async function pandasConnect(ip: string, port: number): Promise<PandasStatusResponse> {
+  return apiFetch<PandasStatusResponse>('/pandas/connect', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ip, port }),
+  });
+}
+
+export async function pandasDisconnect(): Promise<PandasStatusResponse> {
+  return apiFetch<PandasStatusResponse>('/pandas/disconnect', { method: 'POST' });
+}
+
+export async function pandasStatus(): Promise<PandasStatusResponse> {
+  return apiFetch<PandasStatusResponse>('/pandas/status');
+}
+
+export interface LiveSignalValue {
+  name: string;
+  value: number;
+  unit: string;
+}
+
+export interface WsFrameMessage {
+  type: 'frame';
+  frameId: number;
+  timestamp: number;
+  signals: LiveSignalValue[];
+}
+
+export interface WsRawFrameMessage {
+  type: 'frame';
+  frameId: number;
+  timestamp: number;
+  rawData: number[];
+}
+
+export interface WsStatusMessage {
+  type: 'status';
+  connected: boolean;
+}
+
+export interface WsTrackMessage {
+  type: 'track';
+  frameIds: number[];
+}
+
+export interface WsUntrackMessage {
+  type: 'untrack';
+  frameIds: number[];
+}

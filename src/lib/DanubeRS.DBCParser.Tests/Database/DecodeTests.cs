@@ -152,9 +152,9 @@ public class DecodeTests
         db.TryParseBinaryMessage(1, new byte[8], out _, out var defn).Should().BeTrue();
         var statusDef = defn!.Signals.First(s => s.Signal.Name == "Status");
         statusDef.ValueLookup.Should().NotBeNull();
-        statusDef.ValueLookup!.Should().ContainKey(0u).WhoseValue.Should().Be("\"Off\"");
-        statusDef.ValueLookup.Should().ContainKey(1u).WhoseValue.Should().Be("\"On\"");
-        statusDef.ValueLookup.Should().ContainKey(2u).WhoseValue.Should().Be("\"Fault\"");
+        statusDef.ValueLookup!.Should().ContainKey(0u).WhoseValue.Should().Be("Off");
+        statusDef.ValueLookup.Should().ContainKey(1u).WhoseValue.Should().Be("On");
+        statusDef.ValueLookup.Should().ContainKey(2u).WhoseValue.Should().Be("Fault");
     }
 
     [Fact]

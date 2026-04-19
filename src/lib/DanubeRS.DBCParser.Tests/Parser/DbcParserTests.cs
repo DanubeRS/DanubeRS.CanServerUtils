@@ -50,7 +50,7 @@ BS_:
 BU_:
 
 ";
-        ParseDbc(dbc).Version.VersionString.Should().Be("\"CANdb++ 3.0\"");
+        ParseDbc(dbc).Version.VersionString.Should().Be("CANdb++ 3.0");
     }
 
     [Fact]
@@ -79,7 +79,7 @@ BU_: Vector ESP ABS
         signal.Size.Should().Be(8);
         signal.Factor.Should().Be(0.01);
         signal.Offset.Should().Be(0);
-        signal.Unit.Should().Be("\"km/h\"");
+        signal.Unit.Should().Be("km/h");
         signal.ValueType.Should().Be(ValueType.Unsigned);
         signal.Order.Should().Be(Endianness.Little);
     }
@@ -180,9 +180,9 @@ BU_: Vector ESP ABS
         valDesc.Should().HaveCount(1);
         valDesc[0].MessageId.Should().Be(1);
         valDesc[0].SignalName.Should().Be("Status");
-        valDesc[0].Values.Should().ContainKey(0u).WhoseValue.Should().Be("\"Off\"");
-        valDesc[0].Values.Should().ContainKey(1u).WhoseValue.Should().Be("\"On\"");
-        valDesc[0].Values.Should().ContainKey(2u).WhoseValue.Should().Be("\"Fault\"");
+        valDesc[0].Values.Should().ContainKey(0u).WhoseValue.Should().Be("Off");
+        valDesc[0].Values.Should().ContainKey(1u).WhoseValue.Should().Be("On");
+        valDesc[0].Values.Should().ContainKey(2u).WhoseValue.Should().Be("Fault");
     }
 
     [Fact]
@@ -192,7 +192,7 @@ BU_: Vector ESP ABS
         var defs = ParseDbc(dbc).AttributeDefinitions;
         defs.Should().HaveCount(1);
         defs[0].ObjectType.Should().Be("BO_");
-        defs[0].Name.Should().Be("\"GenMsgCycleTime\"");
+        defs[0].Name.Should().Be("GenMsgCycleTime");
         defs[0].ValueType.Should().BeOfType<IntAttributeValueType>();
     }
 
@@ -202,7 +202,7 @@ BU_: Vector ESP ABS
         const string dbc = "VERSION \"\"\n\nNS_ :\n\nBS_:\n\nBU_:\n\nBA_DEF_ BO_ \"GenMsgType\" ENUM \"Standard\",\"Extended\";\n\n";
         var defs = ParseDbc(dbc).AttributeDefinitions;
         var enumDef = (EnumAttributeValueType)defs[0].ValueType;
-        enumDef.Values.Should().Equal("\"Standard\"", "\"Extended\"");
+        enumDef.Values.Should().Equal("Standard", "Extended");
     }
 
     [Fact]
@@ -211,7 +211,7 @@ BU_: Vector ESP ABS
         const string dbc = "VERSION \"\"\n\nNS_ :\n\nBS_:\n\nBU_:\n\nBA_DEF_DEF_ \"GenMsgCycleTime\" 500;\n\n";
         var defaults = ParseDbc(dbc).AttributeDefaults;
         defaults.Should().HaveCount(1);
-        defaults[0].AttributeName.Should().Be("\"GenMsgCycleTime\"");
+        defaults[0].AttributeName.Should().Be("GenMsgCycleTime");
         defaults[0].Value.Should().BeOfType<DoubleAttributeDefaultValue>()
             .Which.Value.Should().Be(500.0);
     }
@@ -242,7 +242,7 @@ BA_DEF_ BO_ ""GenMsgFactor"" FLOAT -1E+37 1E+37;
 
         defs.Should().HaveCount(1);
         defs[0].ObjectType.Should().Be("BO_");
-        defs[0].Name.Should().Be("\"GenMsgFactor\"");
+        defs[0].Name.Should().Be("GenMsgFactor");
         // CURRENT BUG: Parser uses "INT" keyword instead of "FLOAT", so this will fail
         defs[0].ValueType.Should().BeOfType<FloatAttributeValueType>(
             "because FLOAT attributes use 'FLOAT' keyword per spec Section 12.1");
@@ -266,7 +266,7 @@ BA_DEF_DEF_ ""Factor"" 2.5;
         var parsed = ParseDbc(dbc);
 
         parsed.AttributeDefaults.Should().HaveCount(1);
-        parsed.AttributeDefaults[0].AttributeName.Should().Be("\"Factor\"");
+        parsed.AttributeDefaults[0].AttributeName.Should().Be("Factor");
         parsed.AttributeDefaults[0].Value.Should().BeOfType<DoubleAttributeDefaultValue>()
             .Which.Value.Should().Be(2.5);
     }
@@ -386,7 +386,7 @@ BO_ 536870912 ExtMsg: 8 Vector
     {
         const string dbc = "VERSION \"test\"\n\nNS_ :\n\nBS_:\n\nBU_: Vector ESP\n\nBO_ 132 VehicleData: 8 Vector\n SG_ Speed : 0|16@1+ (0.01,0) [0|655.35] \"km/h\" Vector\n SG_ Temp : 16|8@1- (0.1,-40) [-40|215] \"C\" Vector\n\nBA_DEF_ BO_ \"GenMsgCycleTime\" INT 0 65535;\n\nBA_DEF_DEF_ \"GenMsgCycleTime\" 100;\n\nBA_ \"GenMsgCycleTime\" BO_ 132 100;\n\nVAL_ 132 Speed 0 \"Stopped\" 1 \"Moving\";\n\n";
         var parsed = ParseDbc(dbc);
-        parsed.Version.VersionString.Should().Be("\"test\"");
+        parsed.Version.VersionString.Should().Be("test");
         parsed.Nodes.NodeList.Should().Equal("Vector", "ESP");
         parsed.Messages.Should().HaveCount(1);
         parsed.Messages[0].Signals.Should().HaveCount(2);

@@ -9,6 +9,11 @@ export default defineConfig({
         target: 'http://localhost:5238',
         changeOrigin: true,
       },
+      '/ws': {
+        target: 'ws://localhost:5238',
+        ws: true,
+        changeOrigin: true,
+      },
     },
   },
   build: {

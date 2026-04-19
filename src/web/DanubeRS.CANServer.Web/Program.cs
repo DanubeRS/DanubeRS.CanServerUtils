@@ -2,13 +2,16 @@ using System.Collections;
 using System.Text.Json.Serialization;
 using DanubeRS.CANServer.Lib;
 using DanubeRS.CANServer.Lib.BinaryLogs;
+using DanubeRS.CANServer.Lib.Connections;
 using DanubeRS.CanServerUtils.Lib;
 using DanubeRS.DBCParser;
+using DanubeRS.CANServer.Web;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSingleton<DbcEditService>();
 builder.Services.AddSingleton<CanLogService>();
+builder.Services.AddSingleton<PandasConnectionService>();
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
@@ -18,6 +21,7 @@ var app = builder.Build();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseWebSockets();
 
 app.MapPost("/api/dbc/load", async (HttpContext context, DbcEditService editService) =>
 {
@@ -444,6 +448,96 @@ app.MapPost("/api/decode/preview", (PreviewRequest request, CanLogService logSer
     }
 });
 
+void LogWs(string message) => Console.WriteLine($"[WS/Pandas] {message}");
+
+app.MapGet("/ws/pandas", async (HttpContext context, PandasConnectionService pandas) =>
+{
+    if (!context.WebSockets.IsWebSocketRequest)
+    {
+        LogWs($"Rejected - not a WebSocket request");
+        context.Response.StatusCode = 400;
+        return;
+    }
+
+    LogWs($"Accepting WebSocket from {context.Connection.RemoteIpAddress}");
+    var webSocket = await context.WebSockets.AcceptWebSocketAsync();
+    LogWs($"WebSocket accepted. State: {webSocket.State}");
+    var clientId = pandas.AddClient(webSocket);
+    LogWs($"Client {clientId} added. Total clients: {pandas.ClientCount}");
+
+    var buffer = new byte[4096];
+    try
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(30));
+        while (webSocket.State == System.Net.WebSockets.WebSocketState.Open)
+        {
+            var result = await webSocket.ReceiveAsync(buffer, cts.Token);
+            LogWs($"Received message type: {result.MessageType}, count: {result.Count}");
+            if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Close)
+                break;
+
+            if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Text)
+            {
+                var json = System.Text.Encoding.UTF8.GetString(buffer, 0, result.Count);
+                try
+                {
+                    var cmd = System.Text.Json.JsonDocument.Parse(json);
+                    var type = cmd.RootElement.GetProperty("type").GetString();
+                    if (type == "track")
+                    {
+                        foreach (var id in cmd.RootElement.GetProperty("frameIds").EnumerateArray())
+                            await pandas.TrackAsync((uint)id.GetInt32());
+                    }
+                    else if (type == "untrack")
+                    {
+                        foreach (var id in cmd.RootElement.GetProperty("frameIds").EnumerateArray())
+                            await pandas.UntrackAsync((uint)id.GetInt32());
+                    }
+                }
+                catch { }
+            }
+        }
+    }
+    catch (OperationCanceledException) { LogWs($"Client {clientId} timeout"); }
+    catch (System.Net.WebSockets.WebSocketException ex) { LogWs($"Client {clientId} WebSocket error: {ex.Message}"); }
+    finally
+    {
+        LogWs($"Client {clientId} disconnecting. State: {webSocket.State}");
+        pandas.RemoveClient(clientId);
+    }
+});
+
+app.MapPost("/api/pandas/connect", async (PandasConnectRequest req, PandasConnectionService pandas) =>
+{
+    try
+    {
+        await pandas.ConnectAsync(req.Ip, req.Port);
+        return Results.Ok(new { connected = true, ip = req.Ip, port = req.Port });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { connected = false, error = ex.Message });
+    }
+});
+
+app.MapPost("/api/pandas/disconnect", async (PandasConnectionService pandas) =>
+{
+    await pandas.DisconnectAsync();
+    return Results.Ok(new { connected = false });
+});
+
+app.MapGet("/api/pandas/status", (PandasConnectionService pandas) =>
+{
+    var info = pandas.Info;
+    return Results.Ok(new
+    {
+        connected = pandas.IsConnected,
+        ip = info?.Ip,
+        port = info?.Port,
+        driverType = info?.DriverType
+    });
+});
+
 app.MapFallbackToFile("index.html");
 
 app.Run();
@@ -516,3 +610,5 @@ public record SignalOverride(
         };
     }
 }
+
+public record PandasConnectRequest(string Ip, int Port = 1338);
