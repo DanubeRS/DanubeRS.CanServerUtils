@@ -1,9 +1,16 @@
-using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text;
 using Microsoft.Extensions.Logging;
 
 namespace DanubeRS.CANServer.Lib.Pandas;
+
+public static class CanDlc
+{
+    private static readonly int[] DlcToLength = [0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 48, 64];
+
+    public static int ToByteCount(int dlc) =>
+        dlc >= 0 && dlc < DlcToLength.Length ? DlcToLength[dlc] : dlc;
+}
 
 public class PandasClientFactory
 {
@@ -113,30 +120,34 @@ public class PandasClientFactory
                 }
 
                 _logger.Log(LogLevel.Trace, "Result: {Bytes}", BytesToString(result.Buffer));
-                while (offset < result.Buffer.Length)
+                while (offset + 8 <= result.Buffer.Length)
                 {
                     Array.Clear(buffer);
-                    // Get frame
                     Array.Copy(result.Buffer, offset, buffer, 0, 4);
                     _logger.Log(LogLevel.Debug, "Recieved FrameId: {Bytes}", BytesToString(buffer));
                     var frameIdInt = BitConverter.ToUInt32(buffer);
                     var frameId = frameIdInt >> 21;
 
-                    // Get frame data
                     Array.Copy(result.Buffer, offset + 4, buffer, 0, 4);
                     var frameDetailsInt = BitConverter.ToUInt32(buffer);
                     _logger.Log(LogLevel.Trace, "FrameDetails: {Bytes}", BytesToString(buffer));
-                    var frameLength = frameDetailsInt & 0x0F;
+                    var dlc = frameDetailsInt & 0x0F;
+                    var dataLength = CanDlc.ToByteCount((int)dlc);
                     var frameBusId = frameDetailsInt >> 4;
 
-                    // Build frame
-                    var frameData = new byte[8];
-                    Array.Copy(result.Buffer, offset + 8, frameData, 0, 8);
+                    if (offset + 8 + dataLength > result.Buffer.Length)
+                    {
+                        _logger.LogWarning("Incomplete CAN-FD frame: expected {DataLength} bytes but only {Available} remaining at offset {Offset}",
+                            dataLength, result.Buffer.Length - offset - 8, offset);
+                        break;
+                    }
+
+                    var frameData = new byte[dataLength];
+                    Array.Copy(result.Buffer, offset + 8, frameData, 0, dataLength);
                     _logger.Log(LogLevel.Trace, "FrameData: {Bytes}", BytesToString(frameData));
-                    var pandasMessageFrame = new PandasMessageFrame(frameId, frameLength, frameBusId, frameData);
+                    var pandasMessageFrame = new PandasMessageFrame(frameId, (uint)dataLength, frameBusId, frameData);
                     frames.Add(pandasMessageFrame);
 
-                    // If we have an ACK packet, then the client is now ready to accept streamed frames
                     if (frameId == 6)
                     {
                         _logger.LogDebug("ACK received, marking as ready for listening!");
@@ -144,7 +155,7 @@ public class PandasClientFactory
                             await onAckReceived.Invoke();
                     }
 
-                    offset += 16;
+                    offset += 8 + dataLength;
                 }
 
                 onMessagesReceived(new PandasMessage(frames.ToArray()));
@@ -210,12 +221,12 @@ public record TrackingPacket(byte BusId, (byte first, byte second) Frame)
     }
 }
 
-public record PandasMessage(params PandasMessageFrame[] Frames)
-{
-    public DateTimeOffset Timestamp { get; } = DateTimeOffset.UtcNow;
-}
+public record PandasMessage(params PandasMessageFrame[] Frames);
 
-public record PandasMessageFrame(uint FrameId, uint FrameLength, uint FrameBusId, byte[] FrameData);
+public record PandasMessageFrame(uint FrameId, uint FrameLength, uint FrameBusId, byte[] FrameData)
+{
+    public bool CanFd => FrameLength > 8;
+}
 
 public interface IPandasClientInstance : IDisposable
 {

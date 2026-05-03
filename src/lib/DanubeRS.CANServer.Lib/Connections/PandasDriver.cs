@@ -132,7 +132,7 @@ public class PandasDriver : ICanConnection
         foreach (var frame in message.Frames)
         {
             if (frame.FrameId == 6) continue;
-            var canFrame = new CanFrame(frame.FrameId, frame.FrameBusId, frame.FrameData, message.Timestamp);
+            var canFrame = new CanFrame(frame.FrameId, frame.FrameBusId, frame.FrameData, DateTimeOffset.UtcNow);
             FrameReceived?.Invoke(this, canFrame);
         }
     }

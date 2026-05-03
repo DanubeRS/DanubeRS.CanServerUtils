@@ -8,6 +8,7 @@ using DanubeRS.DBCParser;
 using DanubeRS.CANServer.Web;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.UseUrls("http://localhost:5238");
 
 builder.Services.AddSingleton<DbcEditService>();
 builder.Services.AddSingleton<CanLogService>();
@@ -25,6 +26,9 @@ app.UseWebSockets();
 
 app.MapPost("/api/dbc/load", async (HttpContext context, DbcEditService editService) =>
 {
+    if (context.Request.ContentLength > 50 * 1024 * 1024)
+        return Results.BadRequest(new { error = "DBC file exceeds 50 MB limit" });
+
     var form = await context.Request.ReadFormAsync();
     var file = form.Files.FirstOrDefault();
     if (file == null)
@@ -33,8 +37,8 @@ app.MapPost("/api/dbc/load", async (HttpContext context, DbcEditService editServ
     using var stream = file.OpenReadStream();
     try
     {
-        editService.LoadDbc(stream);
-        var messages = editService.GetMessages();
+        await editService.LoadDbcAsync(stream);
+        var messages = await editService.GetMessagesAsync();
         return Results.Ok(new
         {
             messageCount = messages.Count,
@@ -51,12 +55,12 @@ app.MapPost("/api/dbc/load", async (HttpContext context, DbcEditService editServ
     }
 });
 
-app.MapGet("/api/dbc/messages", (DbcEditService editService) =>
+app.MapGet("/api/dbc/messages", async (DbcEditService editService) =>
 {
     if (!editService.IsLoaded)
         return Results.BadRequest(new { error = "No DBC file loaded" });
 
-    var messages = editService.GetMessages();
+    var messages = await editService.GetMessagesAsync();
     return Results.Ok(messages.Select(m => new
     {
         frameId = m.Header.Id,
@@ -85,11 +89,11 @@ app.MapGet("/api/dbc/messages", (DbcEditService editService) =>
     }));
 });
 
-app.MapPut("/api/dbc/messages/{frameId}/signals/{signalName}", (uint frameId, string signalName, SignalUpdate update, DbcEditService editService) =>
+app.MapPut("/api/dbc/messages/{frameId}/signals/{signalName}", async (uint frameId, string signalName, SignalUpdate update, DbcEditService editService) =>
 {
     try
     {
-        var message = editService.GetMessage(frameId);
+        var message = await editService.GetMessageAsync(frameId);
         if (message == null)
             return Results.NotFound(new { error = $"Message with frame ID 0x{frameId:X} not found" });
 
@@ -113,7 +117,7 @@ app.MapPut("/api/dbc/messages/{frameId}/signals/{signalName}", (uint frameId, st
             Multiplex = update.ClearMultiplex ? null : (update.Multiplex ?? existing.Multiplex)
         };
 
-        var result = editService.UpdateSignal(frameId, signalName, updated);
+        var result = await editService.UpdateSignalAsync(frameId, signalName, updated);
         return Results.Ok(new
         {
             name = result.Name,
@@ -144,7 +148,7 @@ app.MapPut("/api/dbc/messages/{frameId}/signals/{signalName}", (uint frameId, st
     }
 });
 
-app.MapPost("/api/dbc/messages/{frameId}/signals", (uint frameId, SignalCreate create, DbcEditService editService) =>
+app.MapPost("/api/dbc/messages/{frameId}/signals", async (uint frameId, SignalCreate create, DbcEditService editService) =>
 {
     try
     {
@@ -163,7 +167,7 @@ app.MapPost("/api/dbc/messages/{frameId}/signals", (uint frameId, SignalCreate c
             create.Receiver ?? "Vector"
         );
 
-        var result = editService.AddSignal(frameId, signal);
+        var result = await editService.AddSignalAsync(frameId, signal);
         return Results.Ok(new
         {
             name = result.Name,
@@ -181,11 +185,11 @@ app.MapPost("/api/dbc/messages/{frameId}/signals", (uint frameId, SignalCreate c
     }
 });
 
-app.MapDelete("/api/dbc/messages/{frameId}/signals/{signalName}", (uint frameId, string signalName, DbcEditService editService) =>
+app.MapDelete("/api/dbc/messages/{frameId}/signals/{signalName}", async (uint frameId, string signalName, DbcEditService editService) =>
 {
     try
     {
-        editService.RemoveSignal(frameId, signalName);
+        await editService.RemoveSignalAsync(frameId, signalName);
         return Results.NoContent();
     }
     catch (KeyNotFoundException ex)
@@ -194,12 +198,12 @@ app.MapDelete("/api/dbc/messages/{frameId}/signals/{signalName}", (uint frameId,
     }
 });
 
-app.MapPost("/api/dbc/messages", (MessageCreate create, DbcEditService editService) =>
+app.MapPost("/api/dbc/messages", async (MessageCreate create, DbcEditService editService) =>
 {
     try
     {
         var header = new DanubeRS.CanServerUtils.Lib.Parser.MessageHeader(create.FrameId, create.Name, create.Size, create.Node ?? "Vector");
-        var message = editService.AddMessage(header);
+        var message = await editService.AddMessageAsync(header);
         return Results.Ok(new
         {
             frameId = message.Header.Id,
@@ -214,11 +218,11 @@ app.MapPost("/api/dbc/messages", (MessageCreate create, DbcEditService editServi
     }
 });
 
-app.MapDelete("/api/dbc/messages/{frameId}", (uint frameId, DbcEditService editService) =>
+app.MapDelete("/api/dbc/messages/{frameId}", async (uint frameId, DbcEditService editService) =>
 {
     try
     {
-        editService.RemoveMessage(frameId);
+        await editService.RemoveMessageAsync(frameId);
         return Results.NoContent();
     }
     catch (KeyNotFoundException ex)
@@ -227,14 +231,14 @@ app.MapDelete("/api/dbc/messages/{frameId}", (uint frameId, DbcEditService editS
     }
 });
 
-app.MapGet("/api/dbc/export", (DbcEditService editService) =>
+app.MapGet("/api/dbc/export", async (DbcEditService editService) =>
 {
     if (!editService.IsLoaded)
         return Results.BadRequest(new { error = "No DBC file loaded" });
 
     try
     {
-        var content = editService.ExportDbc();
+        var content = await editService.ExportDbcAsync();
         return Results.File(
             System.Text.Encoding.UTF8.GetBytes(content),
             "text/plain",
@@ -249,6 +253,8 @@ app.MapGet("/api/dbc/export", (DbcEditService editService) =>
 
 app.MapPost("/api/log/upload", async (HttpContext context, CanLogService logService) =>
 {
+    if (context.Request.ContentLength > 50 * 1024 * 1024)
+        return Results.BadRequest(new { error = "Log file exceeds 50 MB limit" });
     var form = await context.Request.ReadFormAsync();
     var file = form.Files.FirstOrDefault();
     if (file == null)
@@ -265,7 +271,7 @@ app.MapPost("/api/log/upload", async (HttpContext context, CanLogService logServ
         return Results.Ok(new
         {
             frameCount = logService.FrameCount,
-            distinctFrameIds = logService.GetDistinctFrameIds().ToList()
+            distinctFrameIds = (await logService.GetDistinctFrameIdsAsync()).ToList()
         });
     }
     catch (Exception ex)
@@ -274,14 +280,14 @@ app.MapPost("/api/log/upload", async (HttpContext context, CanLogService logServ
     }
 });
 
-app.MapGet("/api/log/decode-signal", (uint frameId, string signalName, CanLogService logService, DbcEditService editService) =>
+app.MapGet("/api/log/decode-signal", async (uint frameId, string signalName, CanLogService logService, DbcEditService editService) =>
 {
     if (!logService.IsLoaded)
         return Results.BadRequest(new { error = "No log file loaded" });
     if (!editService.IsLoaded)
         return Results.BadRequest(new { error = "No DBC file loaded" });
 
-    var defn = editService.GetMessageDefinition(frameId);
+    var defn = await editService.GetMessageDefinitionAsync(frameId);
     if (defn == null)
         return Results.NotFound(new { error = $"No message definition for frame ID 0x{frameId:X}" });
 
@@ -289,7 +295,8 @@ app.MapGet("/api/log/decode-signal", (uint frameId, string signalName, CanLogSer
     if (signalDef == null)
         return Results.NotFound(new { error = $"Signal '{signalName}' not found in message 0x{frameId:X}" });
 
-    var frames = logService.GetFrames(0, int.MaxValue, frameId);
+    const int maxDecodeFrames = 10000;
+    var frames = await logService.GetFramesAsync(0, maxDecodeFrames, frameId);
     var timeSeries = new List<object>();
     foreach (var frame in frames)
     {
@@ -308,37 +315,60 @@ app.MapGet("/api/log/decode-signal", (uint frameId, string signalName, CanLogSer
     return Results.Ok(timeSeries);
 });
 
-app.MapGet("/api/log/frames", (int skip, int take, uint? frameId, CanLogService logService, DbcEditService editService) =>
+app.MapGet("/api/log/frames", async (int skip, int take, uint? frameId, CanLogService logService, DbcEditService editService) =>
 {
     if (!logService.IsLoaded)
         return Results.BadRequest(new { error = "No log file loaded" });
 
-    var frames = logService.GetFrames(skip, take, frameId);
-    var result = frames.Select((f, i) =>
+    take = Math.Clamp(take, 1, 10000);
+
+    var frames = await logService.GetFramesAsync(skip, take, frameId);
+    var result = new List<object>();
+    var index = 0;
+    foreach (var f in frames)
     {
-        var defn = editService.GetMessageDefinition(f.FrameId);
-        return new
+        var defn = await editService.GetMessageDefinitionAsync(f.FrameId);
+        result.Add(new
         {
-            index = skip + i,
+            index = skip + index,
             frameTime = f.FrameTime,
             frameId = f.FrameId,
             busId = f.BusId,
             payload = f.FramePayload,
             messageName = defn?.Header.Name
-        };
+        });
+        index++;
+    }
+    return Results.Ok(result);
+});
+
+app.MapGet("/api/log/raw-frames", async (uint frameId, int skip, int take, CanLogService logService) =>
+{
+    if (!logService.IsLoaded)
+        return Results.BadRequest(new { error = "No log file loaded" });
+
+    take = Math.Clamp(take, 1, 10000);
+
+    var frames = await logService.GetFramesAsync(skip, take, frameId);
+    var result = frames.Select(f => new
+    {
+        frameTime = f.FrameTime,
+        frameId = f.FrameId,
+        busId = f.BusId,
+        payload = f.FramePayload
     });
     return Results.Ok(result);
 });
 
-app.MapGet("/api/log/frames/{index}", (int index, CanLogService logService, DbcEditService editService) =>
+app.MapGet("/api/log/frames/{index}", async (int index, CanLogService logService, DbcEditService editService) =>
 {
     if (!logService.IsLoaded)
         return Results.BadRequest(new { error = "No log file loaded" });
 
     try
     {
-        var frame = logService.GetFrame(index);
-        var defn = editService.GetMessageDefinition(frame.FrameId);
+        var frame = await logService.GetFrameAsync(index);
+        var defn = await editService.GetMessageDefinitionAsync(frame.FrameId);
         if (defn == null)
             return Results.Ok(new
             {
@@ -383,7 +413,7 @@ app.MapGet("/api/log/frames/{index}", (int index, CanLogService logService, DbcE
     }
 });
 
-app.MapPost("/api/decode/preview", (PreviewRequest request, CanLogService logService, DbcEditService editService) =>
+app.MapPost("/api/decode/preview", async (PreviewRequest request, CanLogService logService, DbcEditService editService) =>
 {
     if (!logService.IsLoaded)
         return Results.BadRequest(new { error = "No log file loaded" });
@@ -392,8 +422,8 @@ app.MapPost("/api/decode/preview", (PreviewRequest request, CanLogService logSer
 
     try
     {
-        var frame = logService.GetFrame(request.FrameIndex);
-        var message = editService.GetMessage(frame.FrameId);
+        var frame = await logService.GetFrameAsync(request.FrameIndex);
+        var message = await editService.GetMessageAsync(frame.FrameId);
         if (message == null)
             return Results.NotFound(new { error = $"No message definition for frame ID 0x{frame.FrameId:X}" });
 
@@ -411,7 +441,7 @@ app.MapPost("/api/decode/preview", (PreviewRequest request, CanLogService logSer
 
         try
         {
-            var defn = editService.BuildDefinitionWithOverrides(frame.FrameId, overrides);
+            var defn = await editService.BuildDefinitionWithOverridesAsync(frame.FrameId, overrides);
             var bitArray = new BitArray(frame.FramePayload);
             MessageValue? value = null;
             var success = defn.IsMultiplexed
@@ -471,14 +501,22 @@ app.MapGet("/ws/pandas", async (HttpContext context, PandasConnectionService pan
         using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(30));
         while (webSocket.State == System.Net.WebSockets.WebSocketState.Open)
         {
-            var result = await webSocket.ReceiveAsync(buffer, cts.Token);
-            LogWs($"Received message type: {result.MessageType}, count: {result.Count}");
+            var ms = new MemoryStream();
+            System.Net.WebSockets.WebSocketReceiveResult result;
+            do
+            {
+                result = await webSocket.ReceiveAsync(buffer, cts.Token);
+                if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Close)
+                    break;
+                ms.Write(buffer, 0, result.Count);
+            } while (!result.EndOfMessage);
+
             if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Close)
                 break;
 
             if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Text)
             {
-                var json = System.Text.Encoding.UTF8.GetString(buffer, 0, result.Count);
+                var json = System.Text.Encoding.UTF8.GetString(ms.GetBuffer(), 0, (int)ms.Length);
                 try
                 {
                     var cmd = System.Text.Json.JsonDocument.Parse(json);
@@ -494,7 +532,7 @@ app.MapGet("/ws/pandas", async (HttpContext context, PandasConnectionService pan
                             await pandas.UntrackAsync((uint)id.GetInt32());
                     }
                 }
-                catch { }
+                catch (Exception ex) { LogWs($"Client {clientId} message parse error: {ex.Message}"); }
             }
         }
     }

@@ -6,6 +6,7 @@ namespace DanubeRS.CANServer.Lib;
 public class CanLogService
 {
     private readonly ILogger<CanLogService> _logger;
+    private readonly SemaphoreSlim _lock = new(1, 1);
     private List<LogReaderFrame> _frames = [];
     private byte[]? _rawData;
 
@@ -20,25 +21,33 @@ public class CanLogService
 
     public async Task LoadLogAsync(Stream stream, CancellationToken cancellationToken = default)
     {
-        var ms = new MemoryStream();
-        await stream.CopyToAsync(ms, cancellationToken);
-        _rawData = ms.ToArray();
-
-        using var dataStream = new MemoryStream(_rawData);
-        var reader = await Reader.Open(dataStream, _logger);
-        if (reader == null)
-            throw new InvalidOperationException("Failed to open log file. Invalid format or corrupted data.");
-
-        var frames = new List<LogReaderFrame>();
-        LogReaderFrame? frame;
-        while ((frame = reader.GetNextFrame()) != null)
+        await _lock.WaitAsync(cancellationToken);
+        try
         {
-            frames.Add(frame);
-        }
+            var ms = new MemoryStream();
+            await stream.CopyToAsync(ms, cancellationToken);
+            _rawData = ms.ToArray();
 
-        _frames = frames;
-        reader.Dispose();
-        _logger.LogInformation("Loaded {FrameCount} frames from log file", _frames.Count);
+            using var dataStream = new MemoryStream(_rawData);
+            var reader = await Reader.Open(dataStream, _logger);
+            if (reader == null)
+                throw new InvalidOperationException("Failed to open log file. Invalid format or corrupted data.");
+
+            var frames = new List<LogReaderFrame>();
+            LogReaderFrame? frame;
+            while ((frame = reader.GetNextFrame()) != null)
+            {
+                frames.Add(frame);
+            }
+
+            _frames = frames;
+            reader.Dispose();
+            _logger.LogInformation("Loaded {FrameCount} frames from log file", _frames.Count);
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 
     public void LoadLog(byte[] data)
@@ -47,36 +56,68 @@ public class CanLogService
         LoadLogAsync(stream).GetAwaiter().GetResult();
     }
 
-    public IReadOnlyList<LogReaderFrame> GetFrames(int skip, int take, uint? frameIdFilter = null)
+    public async Task<IReadOnlyList<LogReaderFrame>> GetFramesAsync(int skip, int take, uint? frameIdFilter = null)
     {
-        EnsureLoaded();
+        await _lock.WaitAsync();
+        try
+        {
+            EnsureLoaded();
 
-        var query = _frames.AsEnumerable();
-        if (frameIdFilter.HasValue)
-            query = query.Where(f => f.FrameId == frameIdFilter.Value);
+            var query = _frames.AsEnumerable();
+            if (frameIdFilter.HasValue)
+                query = query.Where(f => f.FrameId == frameIdFilter.Value);
 
-        return query.Skip(skip).Take(take).ToList();
+            return query.Skip(skip).Take(take).ToList();
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 
-    public LogReaderFrame GetFrame(int index)
+    public async Task<LogReaderFrame> GetFrameAsync(int index)
     {
-        EnsureLoaded();
-        if (index < 0 || index >= _frames.Count)
-            throw new ArgumentOutOfRangeException(nameof(index), $"Frame index {index} is out of range (0-{_frames.Count - 1})");
+        await _lock.WaitAsync();
+        try
+        {
+            EnsureLoaded();
+            if (index < 0 || index >= _frames.Count)
+                throw new ArgumentOutOfRangeException(nameof(index), $"Frame index {index} is out of range (0-{_frames.Count - 1})");
 
-        return _frames[index];
+            return _frames[index];
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 
-    public IEnumerable<uint> GetDistinctFrameIds()
+    public async Task<IEnumerable<uint>> GetDistinctFrameIdsAsync()
     {
-        EnsureLoaded();
-        return _frames.Select(f => f.FrameId).Distinct().Order();
+        await _lock.WaitAsync();
+        try
+        {
+            EnsureLoaded();
+            return _frames.Select(f => f.FrameId).Distinct().Order().ToList();
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 
-    public void Clear()
+    public async Task ClearAsync()
     {
-        _frames = [];
-        _rawData = null;
+        await _lock.WaitAsync();
+        try
+        {
+            _frames = [];
+            _rawData = null;
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 
     private void EnsureLoaded()

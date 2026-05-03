@@ -32,17 +32,17 @@ public class DbcEditServiceTests
         return new DbcEditService(new Microsoft.Extensions.Logging.Abstractions.NullLogger<DbcEditService>());
     }
 
-    private static DbcEditService CreateAndLoad()
+    private static async Task<DbcEditService> CreateAndLoadAsync()
     {
         var service = CreateService();
-        service.LoadDbc(TestDbc);
+        await service.LoadDbcAsync(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(TestDbc)));
         return service;
     }
 
     [Fact]
-    public void LoadDbc_ValidContent_IsLoadedTrue()
+    public async Task LoadDbcAsync_ValidContent_IsLoadedTrue()
     {
-        var service = CreateAndLoad();
+        var service = await CreateAndLoadAsync();
         service.IsLoaded.Should().BeTrue();
     }
 
@@ -55,197 +55,197 @@ public class DbcEditServiceTests
     }
 
     [Fact]
-    public void GetMessages_ReturnsAllMessages()
+    public async Task GetMessagesAsync_ReturnsAllMessages()
     {
-        var service = CreateAndLoad();
-        var messages = service.GetMessages();
+        var service = await CreateAndLoadAsync();
+        var messages = await service.GetMessagesAsync();
         messages.Should().HaveCount(1);
         messages[0].Header.Name.Should().Be("TestMsg");
     }
 
     [Fact]
-    public void GetMessage_ExistingId_ReturnsMessage()
+    public async Task GetMessageAsync_ExistingId_ReturnsMessage()
     {
-        var service = CreateAndLoad();
-        var msg = service.GetMessage(1);
+        var service = await CreateAndLoadAsync();
+        var msg = await service.GetMessageAsync(1);
         msg.Should().NotBeNull();
         msg!.Header.Name.Should().Be("TestMsg");
     }
 
     [Fact]
-    public void GetMessage_NonexistentId_ReturnsNull()
+    public async Task GetMessageAsync_NonexistentId_ReturnsNull()
     {
-        var service = CreateAndLoad();
-        service.GetMessage(999).Should().BeNull();
+        var service = await CreateAndLoadAsync();
+        (await service.GetMessageAsync(999)).Should().BeNull();
     }
 
     [Fact]
-    public void GetMessageDefinition_ReturnsDefinitionForFrame()
+    public async Task GetMessageDefinitionAsync_ReturnsDefinitionForFrame()
     {
-        var service = CreateAndLoad();
-        var defn = service.GetMessageDefinition(1);
+        var service = await CreateAndLoadAsync();
+        var defn = await service.GetMessageDefinitionAsync(1);
         defn.Should().NotBeNull();
         defn!.Header.Id.Should().Be(1u);
         defn.Signals.Count.Should().Be(4);
     }
 
     [Fact]
-    public void UpdateSignal_ChangesSignalProperties()
+    public async Task UpdateSignalAsync_ChangesSignalProperties()
     {
-        var service = CreateAndLoad();
-        var original = service.GetMessage(1)!.Signals.First(s => s.Name == "Unsigned8");
+        var service = await CreateAndLoadAsync();
+        var original = (await service.GetMessageAsync(1))!.Signals.First(s => s.Name == "Unsigned8");
         var updated = original with { StartBit = 48, Size = 8 };
 
-        service.UpdateSignal(1, "Unsigned8", updated);
+        await service.UpdateSignalAsync(1, "Unsigned8", updated);
 
-        var msg = service.GetMessage(1)!;
+        var msg = (await service.GetMessageAsync(1))!;
         var changed = msg.Signals.First(s => s.Name == "Unsigned8");
         changed.StartBit.Should().Be(48);
         changed.Size.Should().Be(8);
     }
 
     [Fact]
-    public void UpdateSignal_OverlappingBits_ThrowsValidationException()
+    public async Task UpdateSignalAsync_OverlappingBits_ThrowsValidationException()
     {
-        var service = CreateAndLoad();
-        var original = service.GetMessage(1)!.Signals.First(s => s.Name == "Unsigned8");
+        var service = await CreateAndLoadAsync();
+        var original = (await service.GetMessageAsync(1))!.Signals.First(s => s.Name == "Unsigned8");
         var overlapping = original with { StartBit = 8 };
 
-        var act = () => service.UpdateSignal(1, "Unsigned8", overlapping);
-        act.Should().Throw<ValidationException>();
+        var act = () => service.UpdateSignalAsync(1, "Unsigned8", overlapping);
+        await act.Should().ThrowAsync<ValidationException>();
     }
 
     [Fact]
-    public void UpdateSignal_NonexistentFrame_ThrowsKeyNotFoundException()
+    public async Task UpdateSignalAsync_NonexistentFrame_ThrowsKeyNotFoundException()
     {
-        var service = CreateAndLoad();
-        var act = () => service.UpdateSignal(999, "Unsigned8", new Signal("X", null, 0, 8, Endianness.Little, DbcValueType.Unsigned, 1, 0, 0, 255, "", "Vector"));
-        act.Should().Throw<KeyNotFoundException>();
+        var service = await CreateAndLoadAsync();
+        var act = () => service.UpdateSignalAsync(999, "Unsigned8", new Signal("X", null, 0, 8, Endianness.Little, DbcValueType.Unsigned, 1, 0, 0, 255, "", "Vector"));
+        await act.Should().ThrowAsync<KeyNotFoundException>();
     }
 
     [Fact]
-    public void AddSignal_NewValidSignal_AddsSuccessfully()
+    public async Task AddSignalAsync_NewValidSignal_AddsSuccessfully()
     {
-        var service = CreateAndLoad();
+        var service = await CreateAndLoadAsync();
         var newSignal = new Signal("NewSignal", null, 48, 8, Endianness.Little, DbcValueType.Unsigned, 1, 0, 0, 255, "", "Vector");
 
-        service.AddSignal(1, newSignal);
+        await service.AddSignalAsync(1, newSignal);
 
-        var msg = service.GetMessage(1)!;
+        var msg = (await service.GetMessageAsync(1))!;
         msg.Signals.Should().Contain(s => s.Name == "NewSignal");
     }
 
     [Fact]
-    public void AddSignal_OverlappingName_ThrowsValidationException()
+    public async Task AddSignalAsync_OverlappingName_ThrowsValidationException()
     {
-        var service = CreateAndLoad();
+        var service = await CreateAndLoadAsync();
         var duplicate = new Signal("Unsigned8", null, 48, 8, Endianness.Little, DbcValueType.Unsigned, 1, 0, 0, 255, "", "Vector");
 
-        var act = () => service.AddSignal(1, duplicate);
-        act.Should().Throw<ValidationException>();
+        var act = () => service.AddSignalAsync(1, duplicate);
+        await act.Should().ThrowAsync<ValidationException>();
     }
 
     [Fact]
-    public void RemoveSignal_ExistingSignal_RemovesSuccessfully()
+    public async Task RemoveSignalAsync_ExistingSignal_RemovesSuccessfully()
     {
-        var service = CreateAndLoad();
-        service.RemoveSignal(1, "Unsigned8");
+        var service = await CreateAndLoadAsync();
+        await service.RemoveSignalAsync(1, "Unsigned8");
 
-        var msg = service.GetMessage(1)!;
+        var msg = (await service.GetMessageAsync(1))!;
         msg.Signals.Should().NotContain(s => s.Name == "Unsigned8");
     }
 
     [Fact]
-    public void RemoveSignal_NonexistentSignal_ThrowsKeyNotFoundException()
+    public async Task RemoveSignalAsync_NonexistentSignal_ThrowsKeyNotFoundException()
     {
-        var service = CreateAndLoad();
-        var act = () => service.RemoveSignal(1, "Nonexistent");
-        act.Should().Throw<KeyNotFoundException>();
+        var service = await CreateAndLoadAsync();
+        var act = () => service.RemoveSignalAsync(1, "Nonexistent");
+        await act.Should().ThrowAsync<KeyNotFoundException>();
     }
 
     [Fact]
-    public void AddMessage_NewValidMessage_AddsSuccessfully()
+    public async Task AddMessageAsync_NewValidMessage_AddsSuccessfully()
     {
-        var service = CreateAndLoad();
+        var service = await CreateAndLoadAsync();
         var header = new MessageHeader(2, "NewMsg", 8, "Vector");
-        service.AddMessage(header);
+        await service.AddMessageAsync(header);
 
-        service.GetMessages().Should().Contain(m => m.Header.Id == 2);
+        (await service.GetMessagesAsync()).Should().Contain(m => m.Header.Id == 2);
     }
 
     [Fact]
-    public void AddMessage_DuplicateFrameId_ThrowsValidationException()
+    public async Task AddMessageAsync_DuplicateFrameId_ThrowsValidationException()
     {
-        var service = CreateAndLoad();
+        var service = await CreateAndLoadAsync();
         var header = new MessageHeader(1, "NewMsg", 8, "Vector");
-        var act = () => service.AddMessage(header);
-        act.Should().Throw<ValidationException>();
+        var act = () => service.AddMessageAsync(header);
+        await act.Should().ThrowAsync<ValidationException>();
     }
 
     [Fact]
-    public void RemoveMessage_ExistingId_RemovesSuccessfully()
+    public async Task RemoveMessageAsync_ExistingId_RemovesSuccessfully()
     {
-        var service = CreateAndLoad();
-        service.RemoveMessage(1);
-        service.GetMessages().Should().BeEmpty();
+        var service = await CreateAndLoadAsync();
+        await service.RemoveMessageAsync(1);
+        (await service.GetMessagesAsync()).Should().BeEmpty();
     }
 
     [Fact]
-    public void RemoveMessage_NonexistentId_ThrowsKeyNotFoundException()
+    public async Task RemoveMessageAsync_NonexistentId_ThrowsKeyNotFoundException()
     {
-        var service = CreateAndLoad();
-        var act = () => service.RemoveMessage(999);
-        act.Should().Throw<KeyNotFoundException>();
+        var service = await CreateAndLoadAsync();
+        var act = () => service.RemoveMessageAsync(999);
+        await act.Should().ThrowAsync<KeyNotFoundException>();
     }
 
     [Fact]
-    public void ExportDbc_ProducesValidDbcThatReParses()
+    public async Task ExportDbcAsync_ProducesValidDbcThatReParses()
     {
-        var service = CreateAndLoad();
-        var exported = service.ExportDbc();
+        var service = await CreateAndLoadAsync();
+        var exported = await service.ExportDbcAsync();
         exported.Should().NotBeNullOrEmpty();
 
         var service2 = CreateService();
-        service2.LoadDbc(exported);
-        service2.GetMessages().Should().HaveCount(1);
+        await service2.LoadDbcAsync(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(exported)));
+        (await service2.GetMessagesAsync()).Should().HaveCount(1);
     }
 
     [Fact]
-    public void ExportDbc_ReflectsSignalEdits()
+    public async Task ExportDbcAsync_ReflectsSignalEdits()
     {
-        var service = CreateAndLoad();
-        var original = service.GetMessage(1)!.Signals.First(s => s.Name == "Unsigned8");
-        service.UpdateSignal(1, "Unsigned8", original with { StartBit = 48 });
+        var service = await CreateAndLoadAsync();
+        var original = (await service.GetMessageAsync(1))!.Signals.First(s => s.Name == "Unsigned8");
+        await service.UpdateSignalAsync(1, "Unsigned8", original with { StartBit = 48 });
 
-        var exported = service.ExportDbc();
+        var exported = await service.ExportDbcAsync();
         var service2 = CreateService();
-        service2.LoadDbc(exported);
+        await service2.LoadDbcAsync(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(exported)));
 
-        var reparsed = service2.GetMessage(1)!;
+        var reparsed = (await service2.GetMessageAsync(1))!;
         var edited = reparsed.Signals.First(s => s.Name == "Unsigned8");
         edited.StartBit.Should().Be(48);
     }
 
     [Fact]
-    public void BuildDefinitionWithOverrides_ReturnsDefinitionWithOverrides()
+    public async Task BuildDefinitionWithOverridesAsync_ReturnsDefinitionWithOverrides()
     {
-        var service = CreateAndLoad();
+        var service = await CreateAndLoadAsync();
         var overrides = new Dictionary<string, Signal>
         {
             ["Unsigned8"] = new Signal("Unsigned8", null, 48, 8, Endianness.Little, DbcValueType.Unsigned, 1, 0, 0, 255, "", "Vector")
         };
 
-        var defn = service.BuildDefinitionWithOverrides(1, overrides);
+        var defn = await service.BuildDefinitionWithOverridesAsync(1, overrides);
         defn.Should().NotBeNull();
         var changed = defn.Signals.First(s => s.Signal.Name == "Unsigned8");
         changed.Signal.StartBit.Should().Be(48);
     }
 
     [Fact]
-    public void BuildDefinitionWithOverrides_DoesNotMutateOriginal()
+    public async Task BuildDefinitionWithOverridesAsync_DoesNotMutateOriginal()
     {
-        var service = CreateAndLoad();
-        var originalMsg = service.GetMessage(1)!;
+        var service = await CreateAndLoadAsync();
+        var originalMsg = (await service.GetMessageAsync(1))!;
         var originalSignal = originalMsg.Signals.First(s => s.Name == "Unsigned8");
 
         var overrides = new Dictionary<string, Signal>
@@ -253,18 +253,18 @@ public class DbcEditServiceTests
             ["Unsigned8"] = originalSignal with { StartBit = 48 }
         };
 
-        service.BuildDefinitionWithOverrides(1, overrides);
+        await service.BuildDefinitionWithOverridesAsync(1, overrides);
 
-        var originalAfter = service.GetMessage(1)!;
+        var originalAfter = (await service.GetMessageAsync(1))!;
         var originalStill = originalAfter.Signals.First(s => s.Name == "Unsigned8");
         originalStill.StartBit.Should().Be(originalSignal.StartBit);
     }
 
     [Fact]
-    public void LoadDbc_SecondLoad_ReplacesPrevious()
+    public async Task LoadDbcAsync_SecondLoad_ReplacesPrevious()
     {
-        var service = CreateAndLoad();
-        service.GetMessages().Should().HaveCount(1);
+        var service = await CreateAndLoadAsync();
+        (await service.GetMessagesAsync()).Should().HaveCount(1);
 
         const string differentDbc = """
             VERSION ""
@@ -280,8 +280,8 @@ public class DbcEditServiceTests
 
 
             """;
-        service.LoadDbc(differentDbc);
-        service.GetMessages().Should().HaveCount(1);
-        service.GetMessage(100)!.Header.Name.Should().Be("StatusMsg");
+        await service.LoadDbcAsync(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(differentDbc)));
+        (await service.GetMessagesAsync()).Should().HaveCount(1);
+        (await service.GetMessageAsync(100))!.Header.Name.Should().Be("StatusMsg");
     }
 }

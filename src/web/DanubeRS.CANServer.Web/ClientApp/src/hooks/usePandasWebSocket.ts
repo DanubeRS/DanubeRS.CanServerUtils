@@ -33,6 +33,9 @@ export function usePandasWebSocket() {
         const msg = JSON.parse(event.data);
         if (msg.type === 'frame') {
           useDbcStore.getState().addLiveFrame(msg as api.WsFrameMessage);
+          if (msg.rawData) {
+            useDbcStore.getState().addLiveAnalysisFrame(msg as api.WsRawFrameMessage);
+          }
         } else if (msg.type === 'status') {
           useDbcStore.getState().setPandasConnected(msg.connected);
           if (!msg.connected) {
@@ -88,15 +91,24 @@ export function usePandasWebSocket() {
     }
   }, [pandasConnected, connect]);
 
+  const selectedFrameId = useDbcStore(s => s.selectedFrameId);
+
   useEffect(() => {
-    if (!pandasConnected || !selectedSignal) return;
-    const frameId = selectedSignal.frameId;
-    useDbcStore.getState().clearLiveData();
-    track([frameId]);
-    return () => {
-      untrack([frameId]);
-    };
-  }, [pandasConnected, selectedSignal?.frameId, selectedSignal?.signalName, track, untrack]);
+    if (!pandasConnected) return;
+    if (selectedSignal) {
+      const frameId = selectedSignal.frameId;
+      useDbcStore.getState().clearLiveSignals();
+      track([frameId]);
+      return () => {
+        untrack([frameId]);
+      };
+    } else if (selectedFrameId !== null) {
+      track([selectedFrameId]);
+      return () => {
+        untrack([selectedFrameId]);
+      };
+    }
+  }, [pandasConnected, selectedSignal?.frameId, selectedSignal?.signalName, selectedFrameId, track, untrack]);
 
   useEffect(() => {
     return () => {

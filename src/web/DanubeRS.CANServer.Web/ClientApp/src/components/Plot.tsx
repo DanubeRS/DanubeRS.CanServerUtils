@@ -12,14 +12,40 @@ interface PlotProps {
 export function Plot({ data, layout, config, style, useResizeHandler }: PlotProps) {
   const elRef = useRef<HTMLDivElement>(null);
   const propsRef = useRef({ data, layout, config });
+  const rafRef = useRef<number | null>(null);
+  const lastDrawRef = useRef<number>(0);
 
   propsRef.current = { data, layout, config };
 
   useEffect(() => {
     const el = elRef.current;
     if (!el) return;
-    Plotly.react(el, propsRef.current.data, propsRef.current.layout, propsRef.current.config);
-  });
+
+    const FRAME_INTERVAL = 200;
+
+    const scheduleDraw = () => {
+      if (rafRef.current !== null) return;
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        const now = performance.now();
+        if (now - lastDrawRef.current >= FRAME_INTERVAL) {
+          lastDrawRef.current = now;
+          Plotly.react(el, propsRef.current.data, propsRef.current.layout, propsRef.current.config);
+        } else {
+          scheduleDraw();
+        }
+      });
+    };
+
+    scheduleDraw();
+
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [data, layout]);
 
   useEffect(() => {
     const el = elRef.current;

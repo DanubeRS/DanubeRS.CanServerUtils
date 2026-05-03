@@ -1,4 +1,4 @@
-﻿// See https://aka.ms/new-console-template for more information
+// See https://aka.ms/new-console-template for more information
 
 using System.Globalization;
 using System.Net.Sockets;
@@ -40,7 +40,7 @@ return;
 
 void HandleMessages(PandasMessage message)
 {
-    logger.LogInformation("Received {Message} at {timestamp:s}", message.Frames.Length, message.Timestamp);
+    logger.LogInformation("Received {Message} frames", message.Frames.Length);
     foreach (var frame in message.Frames)
     {
         logger.LogInformation("Frame {FrameId}", frame.FrameId);

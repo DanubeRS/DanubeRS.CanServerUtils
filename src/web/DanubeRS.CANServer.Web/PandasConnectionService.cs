@@ -13,6 +13,7 @@ public class PandasConnectionService
 {
     private readonly ILogger<PandasConnectionService> _logger;
     private readonly DbcEditService _dbcService;
+    private readonly SemaphoreSlim _connectLock = new(1, 1);
     private PandasDriver? _driver;
     private readonly ConcurrentDictionary<Guid, WebSocket> _clients = new();
 
@@ -28,30 +29,51 @@ public class PandasConnectionService
 
     public async Task ConnectAsync(string ip, int port, CancellationToken cancellationToken = default)
     {
-        if (_driver != null)
-            await DisconnectAsync(cancellationToken);
-
-        var loggerFactory = LoggerFactory.Create(builder => builder.AddDebug());
-        _driver = new PandasDriver(ip, port, loggerFactory);
-        _driver.FrameReceived += OnFrameReceived;
-        _driver.ConnectionChanged += OnConnectionChanged;
-
+        await _connectLock.WaitAsync(cancellationToken);
         try
         {
-            await _driver.ConnectAsync(cancellationToken);
+            if (_driver != null)
+                await DisconnectInnerAsync(cancellationToken);
+
+            var loggerFactory = LoggerFactory.Create(builder => builder.AddDebug());
+            _driver = new PandasDriver(ip, port, loggerFactory);
+            _driver.FrameReceived += OnFrameReceived;
+            _driver.ConnectionChanged += OnConnectionChanged;
+
+            try
+            {
+                await _driver.ConnectAsync(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to connect to Panda at {Ip}:{Port}", ip, port);
+                _driver.FrameReceived -= OnFrameReceived;
+                _driver.ConnectionChanged -= OnConnectionChanged;
+                _driver.Dispose();
+                _driver = null;
+                throw;
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            _logger.LogError(ex, "Failed to connect to Panda at {Ip}:{Port}", ip, port);
-            _driver.FrameReceived -= OnFrameReceived;
-            _driver.ConnectionChanged -= OnConnectionChanged;
-            _driver.Dispose();
-            _driver = null;
-            throw;
+            _connectLock.Release();
         }
     }
 
     public async Task DisconnectAsync(CancellationToken cancellationToken = default)
+    {
+        await _connectLock.WaitAsync(cancellationToken);
+        try
+        {
+            await DisconnectInnerAsync(cancellationToken);
+        }
+        finally
+        {
+            _connectLock.Release();
+        }
+    }
+
+    private async Task DisconnectInnerAsync(CancellationToken cancellationToken)
     {
         if (_driver != null)
         {
@@ -88,14 +110,14 @@ public class PandasConnectionService
             _ = CleanupClientAsync(webSocket);
     }
 
-    private static async Task CleanupClientAsync(WebSocket webSocket)
+    private async Task CleanupClientAsync(WebSocket webSocket)
     {
         try
         {
             if (webSocket.State == WebSocketState.Open)
                 await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Client disconnected", CancellationToken.None);
         }
-        catch { }
+        catch (WebSocketException) { }
     }
 
     private void OnFrameReceived(object? sender, CanFrame frame)
@@ -123,7 +145,7 @@ public class PandasConnectionService
             };
         }
 
-        var defn = _dbcService.GetMessageDefinition(frame.FrameId);
+        var defn = _dbcService.GetMessageDefinitionAsync(frame.FrameId).GetAwaiter().GetResult();
         if (defn == null)
         {
             return new
@@ -156,6 +178,7 @@ public class PandasConnectionService
             type = "frame",
             frameId = frame.FrameId,
             timestamp = frame.Timestamp.ToUnixTimeMilliseconds(),
+            rawData = frame.Data,
             signals = value.Signals.Select(s => new { name = s.SignalName, value = s.Value }).ToArray()
         };
     }
@@ -169,7 +192,7 @@ public class PandasConnectionService
         var segment = new ArraySegment<byte>(bytes);
         var deadClients = new List<Guid>();
 
-        foreach (var (id, client) in _clients)
+        foreach (var (id, client) in _clients.ToArray())
         {
             try
             {

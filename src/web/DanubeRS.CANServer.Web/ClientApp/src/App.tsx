@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Link as RouterLink } from 'react-router-dom';
 import { AppBar, Toolbar, Typography, Button, Snackbar, Alert, Box, Chip, IconButton, Tooltip, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, ThemeProvider, createTheme, CssBaseline } from '@mui/material';
-import { UploadFile, DarkMode, LightMode, SettingsBrightness, Cable } from '@mui/icons-material';
+import { UploadFile, DarkMode, LightMode, SettingsBrightness, Cable, PauseCircleOutlined, PlayCircleOutlined, DeleteOutlined } from '@mui/icons-material';
 import { useRef, useState, useMemo } from 'react';
 import { useDbcStore } from './store';
 import { useThemeMode } from './hooks/useThemeMode';
@@ -8,6 +8,7 @@ import { usePandasWebSocket } from './hooks/usePandasWebSocket';
 import { PandasConnectDialog } from './components/PandasConnectDialog';
 import DbcEditorPage from './pages/DbcEditorPage';
 import FrameViewerPage from './pages/FrameViewerPage';
+import BitAnalyzerPage from './pages/BitAnalyzerPage';
 
 function App() {
   const loaded = useDbcStore(s => s.loaded);
@@ -18,6 +19,9 @@ function App() {
   const clearError = useDbcStore(s => s.clearError);
   const loadLog = useDbcStore(s => s.loadLog);
   const disconnectPandas = useDbcStore(s => s.disconnectPandas);
+  const capturing = useDbcStore(s => s.capturing);
+  const toggleCapturing = useDbcStore(s => s.toggleCapturing);
+  const clearLiveHistory = useDbcStore(s => s.clearLiveHistory);
   const logFileRef = useRef<HTMLInputElement>(null);
   const { mode, preference, cyclePreference } = useThemeMode();
   const [pandasDialogOpen, setPandasDialogOpen] = useState(false);
@@ -64,6 +68,7 @@ function App() {
               </Typography>
               <Button color="inherit" component={RouterLink} to="/" size="small">Editor</Button>
               <Button color="inherit" component={RouterLink} to="/frames" size="small">Frames</Button>
+              <Button color="inherit" component={RouterLink} to="/bits" size="small">Bits</Button>
               <Box sx={{ flexGrow: 1 }} />
               <Tooltip title={themeLabel}>
                 <IconButton color="inherit" onClick={cyclePreference} size="small">
@@ -82,6 +87,20 @@ function App() {
                 onClick={handleLiveChipClick}
                 sx={{ cursor: 'pointer', mr: 1 }}
               />
+              {pandasConnected && (
+                <>
+                  <Tooltip title={capturing ? 'Pause capture' : 'Resume capture'}>
+                    <IconButton color="inherit" onClick={toggleCapturing} size="small">
+                      {capturing ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Clear captured data">
+                    <IconButton color="inherit" onClick={clearLiveHistory} size="small">
+                      <DeleteOutlined />
+                    </IconButton>
+                  </Tooltip>
+                </>
+              )}
               <Chip
                 icon={<UploadFile fontSize="small" />}
                 label={logLoaded ? '✓ Log' : '— Log'}
@@ -97,6 +116,7 @@ function App() {
             <Routes>
               <Route path="/" element={<DbcEditorPage />} />
               <Route path="/frames" element={<FrameViewerPage />} />
+              <Route path="/bits" element={<BitAnalyzerPage />} />
             </Routes>
           </Box>
         </Box>

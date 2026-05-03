@@ -1,11 +1,16 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { Box, Typography, Table, TableBody, TableCell, TableHead, TableRow, Button, TextField, IconButton } from '@mui/material';
 import { UploadFile } from '@mui/icons-material';
 import { useDbcStore } from '../store';
+import type { RawFrameInfo } from '../api';
 import * as api from '../api';
 
+function formatPayload(payload: number[]): string {
+  return payload.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+}
+
 export function FrameViewer() {
-  const { logLoaded, frames, selectedSignal, messages, loadLog, loading } = useDbcStore();
+  const { logLoaded, pandasConnected, frames, selectedSignal, messages, loadLog, loading, liveFrameHistory, liveFrameIds, liveFrameHistoryVersion } = useDbcStore();
   const fileRef = useRef<HTMLInputElement>(null);
   const [frameDetail, setFrameDetail] = useState<api.FrameDetail | null>(null);
   const [previewResult, setPreviewResult] = useState<api.DecodedFrame | null>(null);
@@ -35,14 +40,35 @@ export function FrameViewer() {
     setPreviewResult(result);
   };
 
+  const liveFramesForId = useMemo(() => {
+    if (!pandasConnected || !filterId) return [];
+    const id = parseInt(filterId, 16);
+    if (isNaN(id)) return [];
+    return liveFrameHistory.get(id) ?? [];
+  }, [pandasConnected, filterId, liveFrameHistoryVersion, liveFrameHistory]);
+
+  const liveAllFrames = useMemo(() => {
+    if (!pandasConnected || filterId) return [];
+    const all: RawFrameInfo[] = [];
+    for (const [, hist] of liveFrameHistory) {
+      all.push(...hist);
+    }
+    all.sort((a, b) => a.frameTime - b.frameTime);
+    return all;
+  }, [pandasConnected, filterId, liveFrameHistoryVersion, liveFrameHistory]);
+
   const filteredFrames = filterId
     ? frames.filter(f => f.frameId === parseInt(filterId, 16))
     : frames;
 
-  if (!logLoaded) {
+  const displayFrames = pandasConnected
+    ? (filterId ? liveFramesForId : liveAllFrames)
+    : filteredFrames;
+
+  if (!logLoaded && !pandasConnected) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-        <Typography variant="body1" sx={{ mb: 2 }}>Load a CAN log file to view frames</Typography>
+        <Typography variant="body1" sx={{ mb: 2 }}>Load a CAN log file or connect to Panda to view frames</Typography>
         <input ref={fileRef} type="file" accept=".bin,.log" onChange={handleFileUpload} hidden />
         <Button variant="contained" startIcon={<UploadFile />} onClick={() => fileRef.current?.click()} disabled={loading}>
           {loading ? 'Loading...' : 'Load Log File'}
@@ -55,24 +81,57 @@ export function FrameViewer() {
     <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
       <Box sx={{ width: 340, minWidth: 340, borderRight: 1, borderColor: 'divider', display: 'flex', flexDirection: 'column' }}>
         <Box sx={{ p: 1, display: 'flex', gap: 1, alignItems: 'center' }}>
-          <input ref={fileRef} type="file" accept=".bin,.log" onChange={handleFileUpload} hidden />
-          <IconButton size="small" onClick={() => fileRef.current?.click()} disabled={loading} title="Reload Log"><UploadFile fontSize="small" /></IconButton>
+          {!pandasConnected && (
+            <>
+              <input ref={fileRef} type="file" accept=".bin,.log" onChange={handleFileUpload} hidden />
+              <IconButton size="small" onClick={() => fileRef.current?.click()} disabled={loading} title="Reload Log"><UploadFile fontSize="small" /></IconButton>
+            </>
+          )}
           <TextField size="small" placeholder="Filter by ID (hex)" value={filterId} onChange={e => setFilterId(e.target.value)} fullWidth />
+          {pandasConnected && (
+            <Typography variant="caption" sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>
+              {liveFrameIds.length} IDs
+            </Typography>
+          )}
         </Box>
         <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
-          {filteredFrames.map(f => (
-            <Box key={f.index} onClick={() => handleFrameClick(f.index)} sx={{ px: 1, py: 0.25, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' }, fontSize: '0.8rem' }}>
-              <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary', mr: 1 }}>
-                {(f.frameTime / 1000000).toFixed(3)}s
-              </Typography>
-              <Typography component="span" variant="caption" sx={{ fontFamily: 'monospace', color: 'error.main', mr: 1 }}>
-                0x{f.frameId.toString(16).toUpperCase()}
-              </Typography>
-              <Typography component="span" variant="caption" sx={{ color: 'primary.main' }}>
-                {f.messageName ?? '—'}
-              </Typography>
-            </Box>
-          ))}
+          {pandasConnected ? (
+            displayFrames.length === 0 ? (
+              <Box sx={{ p: 2, textAlign: 'center' }}>
+                <Typography variant="body2" color="text.secondary">
+                  {filterId ? 'No frames for this ID yet' : 'Track a frame to see data'}
+                </Typography>
+              </Box>
+            ) : (
+              displayFrames.map((f, i) => (
+                <Box key={i} sx={{ px: 1, py: 0.25, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' }, fontSize: '0.8rem' }}>
+                  <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary', mr: 1 }}>
+                    {(f.frameTime / 1000).toFixed(3)}s
+                  </Typography>
+                  <Typography component="span" variant="caption" sx={{ fontFamily: 'monospace', color: 'error.main', mr: 1 }}>
+                    0x{f.frameId.toString(16).toUpperCase()}
+                  </Typography>
+                  <Typography component="span" variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace' }}>
+                    {formatPayload(f.payload).substring(0, 23)}{f.payload.length > 8 ? '...' : ''}
+                  </Typography>
+                </Box>
+              ))
+            )
+          ) : (
+            filteredFrames.map(f => (
+              <Box key={f.index} onClick={() => handleFrameClick(f.index)} sx={{ px: 1, py: 0.25, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' }, fontSize: '0.8rem' }}>
+                <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary', mr: 1 }}>
+                  {(f.frameTime / 1000000).toFixed(3)}s
+                </Typography>
+                <Typography component="span" variant="caption" sx={{ fontFamily: 'monospace', color: 'error.main', mr: 1 }}>
+                  0x{f.frameId.toString(16).toUpperCase()}
+                </Typography>
+                <Typography component="span" variant="caption" sx={{ color: 'primary.main' }}>
+                  {f.messageName ?? '—'}
+                </Typography>
+              </Box>
+            ))
+          )}
         </Box>
       </Box>
       <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
@@ -117,7 +176,7 @@ export function FrameViewer() {
           </>
         ) : (
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', opacity: 0.4 }}>
-            Select a frame to view details
+            {pandasConnected ? 'Frames will appear as they arrive' : 'Select a frame to view details'}
           </Box>
         )}
       </Box>

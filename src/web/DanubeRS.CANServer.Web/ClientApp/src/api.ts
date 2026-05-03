@@ -146,7 +146,7 @@ export async function getMessages(): Promise<MessageInfo[]> {
 }
 
 export async function updateSignal(frameId: number, signalName: string, update: SignalUpdate): Promise<SignalInfo> {
-  return apiFetch<SignalInfo>(`/dbc/messages/${frameId}/signals/${signalName}`, {
+  return apiFetch<SignalInfo>(`/dbc/messages/${frameId}/signals/${encodeURIComponent(signalName)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(update),
@@ -162,7 +162,11 @@ export async function addSignal(frameId: number, create: SignalCreate): Promise<
 }
 
 export async function removeSignal(frameId: number, signalName: string): Promise<void> {
-  await fetch(`${API_BASE}/dbc/messages/${frameId}/signals/${signalName}`, { method: 'DELETE' });
+  const response = await fetch(`${API_BASE}/dbc/messages/${frameId}/signals/${encodeURIComponent(signalName)}`, { method: 'DELETE' });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(errorData.error || errorData.details || `HTTP ${response.status}`);
+  }
 }
 
 export async function addMessage(create: MessageCreate): Promise<MessageInfo> {
@@ -174,7 +178,11 @@ export async function addMessage(create: MessageCreate): Promise<MessageInfo> {
 }
 
 export async function removeMessage(frameId: number): Promise<void> {
-  await fetch(`${API_BASE}/dbc/messages/${frameId}`, { method: 'DELETE' });
+  const response = await fetch(`${API_BASE}/dbc/messages/${frameId}`, { method: 'DELETE' });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(errorData.error || errorData.details || `HTTP ${response.status}`);
+  }
 }
 
 export async function exportDbc(): Promise<Blob> {
@@ -247,6 +255,18 @@ export interface LiveSignalValue {
   name: string;
   value: number;
   unit: string;
+}
+
+export interface RawFrameInfo {
+  frameTime: number;
+  frameId: number;
+  busId: number;
+  payload: number[];
+}
+
+export async function getRawFrames(frameId: number, skip: number = 0, take: number = 100): Promise<RawFrameInfo[]> {
+  const params = new URLSearchParams({ frameId: String(frameId), skip: String(skip), take: String(take) });
+  return apiFetch<RawFrameInfo[]>(`/log/raw-frames?${params}`);
 }
 
 export interface WsFrameMessage {

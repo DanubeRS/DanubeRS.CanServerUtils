@@ -276,7 +276,7 @@ public class DbcValidatorTests
 
         var result = DbcValidator.ValidateNewMessage(header, db);
         result.IsValid.Should().BeFalse();
-        result.Errors.Should().Contain(e => e.Contains("1 and 8"));
+        result.Errors.Should().Contain(e => e.Contains("1 and 64"));
     }
 
     [Fact]

@@ -17,6 +17,8 @@ interface AppState {
   pandasIp: string | null;
   pandasPort: number | null;
   liveSignalData: Map<string, { time: number; value: number }[]>;
+  liveFrameIds: number[];
+  liveVersion: number;
 
   loadDbc: (file: File) => Promise<void>;
   loadLog: (file: File) => Promise<void>;
@@ -37,7 +39,23 @@ interface AppState {
   disconnectPandas: () => Promise<void>;
   setPandasConnected: (connected: boolean, ip?: string | null, port?: number | null) => void;
   addLiveFrame: (frame: api.WsFrameMessage) => void;
+  addLiveAnalysisFrame: (frame: api.WsRawFrameMessage) => void;
   clearLiveData: () => void;
+  clearLiveSignals: () => void;
+
+  analysisFrames: Map<number, api.RawFrameInfo[]>;
+  analysisWindow: number;
+  analysisPlaybackIndex: number;
+  liveFrameHistory: Map<number, api.RawFrameInfo[]>;
+  liveFrameHistoryVersion: number;
+  livePlaybackIndex: number;
+  capturing: boolean;
+  loadAnalysisFrames: (frameId: number) => Promise<void>;
+  clearAnalysisData: () => void;
+  setAnalysisPlaybackIndex: (index: number) => void;
+  setLivePlaybackIndex: (index: number) => void;
+  toggleCapturing: () => void;
+  clearLiveHistory: () => void;
 }
 
 const MAX_LIVE_SECONDS = 60;
@@ -57,6 +75,15 @@ export const useDbcStore = create<AppState>((set, get) => ({
   pandasIp: null,
   pandasPort: null,
   liveSignalData: new Map<string, { time: number; value: number }[]>(),
+  liveFrameIds: [],
+  liveVersion: 0,
+  analysisFrames: new Map<number, api.RawFrameInfo[]>(),
+  analysisWindow: 100,
+  analysisPlaybackIndex: 0,
+  liveFrameHistory: new Map<number, api.RawFrameInfo[]>(),
+  liveFrameHistoryVersion: 0,
+  livePlaybackIndex: 0,
+  capturing: true,
 
   loadDbc: async (file: File) => {
     set({ loading: true, error: null });
@@ -106,6 +133,10 @@ export const useDbcStore = create<AppState>((set, get) => ({
   updateSignal: async (frameId, signalName, update) => {
     await api.updateSignal(frameId, signalName, update);
     await get().refreshMessages();
+    const newName = (update as Record<string, unknown>).name as string | undefined;
+    if (newName && newName !== signalName) {
+      set({ selectedSignal: { frameId, signalName: newName } });
+    }
     set(s => ({ signalVersion: s.signalVersion + 1 }));
   },
 
@@ -171,6 +202,15 @@ export const useDbcStore = create<AppState>((set, get) => ({
         frames: [],
         totalFrameCount: 0,
         liveSignalData: new Map(),
+        liveFrameIds: [],
+        liveVersion: 0,
+  analysisFrames: new Map(),
+  analysisWindow: 100,
+  analysisPlaybackIndex: 0,
+   liveFrameHistory: new Map(),
+   liveFrameHistoryVersion: 0,
+   livePlaybackIndex: 0,
+   capturing: true,
       });
     } catch (e: any) {
       console.error('Pandas connect failed:', e);
@@ -184,7 +224,7 @@ export const useDbcStore = create<AppState>((set, get) => ({
     } catch (e: any) {
       console.error('Pandas disconnect failed:', e);
     }
-    set({ pandasConnected: false, pandasIp: null, pandasPort: null, liveSignalData: new Map() });
+    set({ pandasConnected: false, pandasIp: null, pandasPort: null, liveSignalData: new Map(), liveFrameIds: [], liveVersion: 0, liveFrameHistory: new Map(), liveFrameHistoryVersion: 0, livePlaybackIndex: 0, capturing: true });
   },
 
   setPandasConnected: (connected: boolean, ip?: string | null, port?: number | null) => {
@@ -196,24 +236,70 @@ export const useDbcStore = create<AppState>((set, get) => ({
   },
 
   addLiveFrame: (frame: api.WsFrameMessage) => {
-    set(s => {
-      const newMap = new Map(s.liveSignalData);
-      const cutoff = frame.timestamp - MAX_LIVE_SECONDS * 1000;
-      for (const sig of frame.signals) {
-        const key = `${frame.frameId}:${sig.name}`;
-        const arr = newMap.get(key);
-        if (arr) {
-          const pruneIdx = arr.findIndex(p => p.time >= cutoff);
-          const trimmed = pruneIdx > 0 ? arr.slice(pruneIdx) : arr;
-          trimmed.push({ time: frame.timestamp, value: sig.value });
-          newMap.set(key, trimmed);
-        } else {
-          newMap.set(key, [{ time: frame.timestamp, value: sig.value }]);
-        }
+    const { liveSignalData, liveFrameIds, capturing } = get();
+    if (!capturing) return;
+    const cutoff = frame.timestamp - MAX_LIVE_SECONDS * 1000;
+    for (const sig of frame.signals) {
+      const key = `${frame.frameId}:${sig.name}`;
+      const arr = liveSignalData.get(key);
+      if (arr) {
+        const pruneIdx = arr.findIndex(p => p.time >= cutoff);
+        if (pruneIdx > 0) arr.splice(0, pruneIdx);
+        arr.push({ time: frame.timestamp, value: sig.value });
+      } else {
+        liveSignalData.set(key, [{ time: frame.timestamp, value: sig.value }]);
       }
-      return { liveSignalData: newMap };
-    });
+    }
+    const newFrameIds = liveFrameIds.includes(frame.frameId) ? liveFrameIds : [...liveFrameIds, frame.frameId];
+    set(s => ({ liveVersion: s.liveVersion + 1, liveFrameIds: newFrameIds }));
   },
 
-  clearLiveData: () => set({ liveSignalData: new Map() }),
+  clearLiveData: () => set({ liveSignalData: new Map(), liveFrameIds: [], liveVersion: 0, liveFrameHistory: new Map(), liveFrameHistoryVersion: 0, livePlaybackIndex: 0, capturing: true }),
+  clearLiveSignals: () => set({ liveSignalData: new Map(), liveVersion: 0 }),
+
+  loadAnalysisFrames: async (frameId: number) => {
+    try {
+      const frames = await api.getRawFrames(frameId, 0, get().analysisWindow);
+      const newMap = new Map(get().analysisFrames);
+      newMap.set(frameId, frames);
+      set({ analysisFrames: newMap, analysisPlaybackIndex: 0 });
+    } catch (e: any) {
+      console.error('Load analysis frames failed:', e);
+      set({ error: e.message });
+    }
+  },
+
+  addLiveAnalysisFrame: (frame: api.WsRawFrameMessage) => {
+    const { analysisFrames, analysisWindow, liveFrameIds, liveFrameHistory, capturing } = get();
+    if (!capturing) return;
+    const rawFrame: api.RawFrameInfo = {
+      frameTime: frame.timestamp,
+      frameId: frame.frameId,
+      busId: 0,
+      payload: frame.rawData,
+    };
+    const frames = analysisFrames.get(frame.frameId);
+    if (frames) {
+      frames.push(rawFrame);
+      if (frames.length > analysisWindow) frames.splice(0, frames.length - analysisWindow);
+    } else {
+      analysisFrames.set(frame.frameId, [rawFrame]);
+    }
+    const history = liveFrameHistory.get(frame.frameId);
+    if (history) {
+      history.push(rawFrame);
+      if (history.length > 100) history.splice(0, history.length - 100);
+    } else {
+      liveFrameHistory.set(frame.frameId, [rawFrame]);
+    }
+    const newFrameIds = liveFrameIds.includes(frame.frameId) ? liveFrameIds : [...liveFrameIds, frame.frameId];
+    set({ analysisFrames: new Map(analysisFrames), liveFrameIds: newFrameIds, liveFrameHistory: new Map(liveFrameHistory), liveFrameHistoryVersion: get().liveFrameHistoryVersion + 1 });
+  },
+
+  clearAnalysisData: () => set({ analysisFrames: new Map(), analysisPlaybackIndex: 0 }),
+
+  setAnalysisPlaybackIndex: (index: number) => set({ analysisPlaybackIndex: index }),
+  setLivePlaybackIndex: (index: number) => set({ livePlaybackIndex: index }),
+  toggleCapturing: () => set(s => ({ capturing: !s.capturing })),
+  clearLiveHistory: () => set({ liveFrameHistory: new Map(), liveFrameHistoryVersion: 0, livePlaybackIndex: 0, liveSignalData: new Map(), liveFrameIds: [], liveVersion: 0 }),
 }));

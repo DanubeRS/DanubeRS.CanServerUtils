@@ -1,5 +1,6 @@
 using System.Text;
 using DanubeRS.CANServer.Lib.Downloader;
+using DanubeRS.CANServer.Lib.Pandas;
 using Microsoft.Extensions.Logging;
 
 namespace DanubeRS.CANServer.Lib.BinaryLogs;

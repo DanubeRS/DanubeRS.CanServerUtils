@@ -10,6 +10,7 @@ export function LogSignalViewer() {
   const logLoaded = useDbcStore(s => s.logLoaded);
   const pandasConnected = useDbcStore(s => s.pandasConnected);
   const liveSignalData = useDbcStore(s => s.liveSignalData);
+  const liveVersion = useDbcStore(s => s.liveVersion);
   const loading = useDbcStore(s => s.loading);
   const loadLog = useDbcStore(s => s.loadLog);
   const signalVersion = useDbcStore(s => s.signalVersion);
@@ -46,7 +47,7 @@ export function LogSignalViewer() {
     if (!selectedSignal || !pandasConnected) return [];
     const key = `${selectedSignal.frameId}:${selectedSignal.signalName}`;
     return liveSignalData.get(key) ?? [];
-  }, [selectedSignal?.frameId, selectedSignal?.signalName, pandasConnected, liveSignalData]);
+  }, [selectedSignal?.frameId, selectedSignal?.signalName, pandasConnected, liveVersion]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

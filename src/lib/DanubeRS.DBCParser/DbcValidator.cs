@@ -61,8 +61,8 @@ public static class DbcValidator
     {
         var result = new ValidationResult();
 
-        if (header.Size < 1 || header.Size > 8)
-            result.AddError($"Message size must be between 1 and 8 bytes, got {header.Size}");
+        if (header.Size < 1 || header.Size > 64)
+            result.AddError($"Message size must be between 1 and 64 bytes, got {header.Size}");
 
         if (string.IsNullOrWhiteSpace(header.Name))
             result.AddError("Message name must not be empty");
@@ -200,8 +200,8 @@ public static class DbcValidator
 
     private static void ValidateMessageProperties(Message message, ValidationResult result)
     {
-        if (message.Header.Size < 1 || message.Header.Size > 8)
-            result.AddError($"Message size must be between 1 and 8 bytes, got {message.Header.Size}");
+        if (message.Header.Size < 1 || message.Header.Size > 64)
+            result.AddError($"Message size must be between 1 and 64 bytes, got {message.Header.Size}");
 
         if (string.IsNullOrWhiteSpace(message.Header.Name))
             result.AddError("Message name must not be empty");
