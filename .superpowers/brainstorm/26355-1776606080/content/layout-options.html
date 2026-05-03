@@ -1,0 +1,108 @@
+<h2>Bit Analyzer: Layout Direction</h2>
+<p class="subtitle">How should the bit analysis tools be organized within the existing app?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>New /bits Route (Full Page)</h3>
+      <p>Dedicated page with its own route. Layout: frame selector + playback controls on left, analysis panels stacked vertically on right. Fits all 7 views but requires scrolling.</p>
+      <div class="mockup">
+        <div class="mockup-header">Preview: Full Page Layout</div>
+        <div class="mockup-body" style="display:flex;gap:12px">
+          <div style="width:30%;border-right:1px solid #444;padding-right:12px">
+            <div class="placeholder" style="height:40px;margin-bottom:8px">Frame ID Selector</div>
+            <div class="placeholder" style="height:60px;margin-bottom:8px">Playback Slider + Play/Pause</div>
+            <div class="placeholder" style="height:200px">Frame List (filterable)</div>
+          </div>
+          <div style="flex:1">
+            <div class="placeholder" style="height:80px;margin-bottom:8px">Bit Flip Diff (consecutive frames)</div>
+            <div class="placeholder" style="height:80px;margin-bottom:8px">Flip Heatmap</div>
+            <div class="placeholder" style="height:80px;margin-bottom:8px">Stability / Entropy Bars</div>
+            <div class="placeholder" style="height:80px;margin-bottom:8px">Correlation Matrix</div>
+            <div class="placeholder" style="height:60px;margin-bottom:8px">Value Clustering</div>
+            <div class="placeholder" style="height:30px">Mux Toggle</div>
+          </div>
+        </div>
+      </div>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Plenty of space for all views</li><li>Clean URL for sharing</li><li>Simplifies existing pages</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Navigation away from editor</li><li>Requires scrolling on smaller screens</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Tabbed Panel on Existing /frames Page</h3>
+      <p>Add a tabbed analysis panel below the frame viewer. Each tab shows one analysis method. Less scrolling, but hidden views require tab switching.</p>
+      <div class="mockup">
+        <div class="mockup-header">Preview: Tabbed Panel</div>
+        <div class="mockup-body" style="display:flex;gap:12px">
+          <div style="width:35%;border-right:1px solid #444;padding-right:12px">
+            <div class="placeholder" style="height:40px;margin-bottom:8px">Frame ID Selector + Playback</div>
+            <div class="placeholder" style="height:250px">Frame List</div>
+          </div>
+          <div style="flex:1">
+            <div style="display:flex;gap:4px;margin-bottom:8px;border-bottom:2px solid #555;padding-bottom:4px">
+              <span style="padding:4px 12px;background:#2a2a3e;border-radius:4px 4px 0 0;font-size:0.85rem">Diff</span>
+              <span style="padding:4px 12px;font-size:0.85rem;color:#888">Heatmap</span>
+              <span style="padding:4px 12px;font-size:0.85rem;color:#888">Stability</span>
+              <span style="padding:4px 12px;font-size:0.85rem;color:#888">Entropy</span>
+              <span style="padding:4px 12px;font-size:0.85rem;color:#888">Correlation</span>
+              <span style="padding:4px 12px;font-size:0.85rem;color:#888">Clustering</span>
+            </div>
+            <div class="placeholder" style="height:120px;margin-bottom:8px">Active Tab Content</div>
+            <div class="placeholder" style="height:30px">Mux Toggle</div>
+          </div>
+        </div>
+      </div>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Context preserved (see frames while analyzing)</li><li>No page navigation</li><li>Tab switching is fast</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Can't see all views simultaneously</li><li>Crowds existing frame viewer</li><li>Tab proliferation (6 tabs)</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Hybrid: New Route + Shared Context</h3>
+      <p>Dedicated /bits route with a compact summary strip (diff + heatmap side-by-side), then expandable sections for deeper analysis. Mux toggle as a top-level control.</p>
+      <div class="mockup">
+        <div class="mockup-header">Preview: Hybrid Layout</div>
+        <div class="mockup-body" style="display:flex;gap:12px">
+          <div style="width:28%;border-right:1px solid #444;padding-right:12px">
+            <div class="placeholder" style="height:36px;margin-bottom:8px">Mux Toggle (top control)</div>
+            <div class="placeholder" style="height:40px;margin-bottom:8px">Frame ID Selector</div>
+            <div class="placeholder" style="height:60px;margin-bottom:8px">Playback Slider + Play/Pause</div>
+            <div class="placeholder" style="height:180px">Frame List</div>
+          </div>
+          <div style="flex:1">
+            <div style="display:flex;gap:12px;margin-bottom:12px">
+              <div class="placeholder" style="height:100px;flex:1">Bit Flip Diff</div>
+              <div class="placeholder" style="height:100px;flex:1">Flip Heatmap</div>
+            </div>
+            <details style="margin-bottom:8px">
+              <summary style="cursor:pointer;color:#90caf9;padding:6px;border:1px solid #333;border-radius:4px">Stability & Entropy Analysis</summary>
+              <div class="placeholder" style="height:80px;margin-top:8px">Stability bars + Entropy bars</div>
+            </details>
+            <details style="margin-bottom:8px">
+              <summary style="cursor:pointer;color:#90caf9;padding:6px;border:1px solid #333;border-radius:4px">Change Correlation</summary>
+              <div class="placeholder" style="height:80px;margin-top:8px">Correlation matrix</div>
+            </details>
+            <details style="margin-bottom:8px">
+              <summary style="cursor:pointer;color:#90caf9;padding:6px;border:1px solid #333;border-radius:4px">Value Clustering</summary>
+              <div class="placeholder" style="height:80px;margin-top:8px">Clustered value display</div>
+            </details>
+          </div>
+        </div>
+      </div>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Most-used views always visible (diff + heatmap)</li><li>Deeper views expandable on demand</li><li>No tab switching for primary workflow</li><li>Dedicated route for focus</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Expandable sections are less discoverable</li><li>Still requires scrolling on small screens</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>

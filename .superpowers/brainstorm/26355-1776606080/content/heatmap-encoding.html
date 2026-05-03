@@ -1,0 +1,128 @@
+<h2>Flip Heatmap: Visual Encoding</h2>
+<p class="subtitle">How should bit flip frequency be visualized?</p>
+
+<div class="cards">
+  <div class="card" data-choice="intensity" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="padding:16px;background:#1a1a2e">
+        <div style="display:flex;gap:2px;margin-bottom:4px">
+          <span style="color:#888;font-size:0.7rem;width:28px">B0</span>
+          <div style="display:flex;gap:2px">
+            <div style="width:28px;height:28px;background:#111;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.55rem;color:#666">0</div>
+            <div style="width:28px;height:28px;background:#1a3a1a;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.55rem;color:#4caf50">3</div>
+            <div style="width:28px;height:28px;background:#2d5a2d;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.55rem;color:#66bb6a">7</div>
+            <div style="width:28px;height:28px;background:#111;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.55rem;color:#666">0</div>
+            <div style="width:28px;height:28px;background:#4caf50;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.55rem;color:#fff">15</div>
+            <div style="width:28px;height:28px;background:#1a3a1a;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.55rem;color:#4caf50">2</div>
+            <div style="width:28px;height:28px;background:#2d5a2d;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.55rem;color:#66bb6a">5</div>
+            <div style="width:28px;height:28px;background:#111;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.55rem;color:#666">0</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:2px;margin-bottom:8px">
+          <span style="color:#888;font-size:0.7rem;width:28px">B1</span>
+          <div style="display:flex;gap:2px">
+            <div style="width:28px;height:28px;background:#1a3a1a;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.55rem;color:#4caf50">4</div>
+            <div style="width:28px;height:28px;background:#111;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.55rem;color:#666">1</div>
+            <div style="width:28px;height:28px;background:#2d5a2d;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.55rem;color:#66bb6a">8</div>
+            <div style="width:28px;height:28px;background:#1a3a1a;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.55rem;color:#4caf50">3</div>
+            <div style="width:28px;height:28px;background:#111;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.55rem;color:#666">0</div>
+            <div style="width:28px;height:28px;background:#4caf50;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.55rem;color:#fff">12</div>
+            <div style="width:28px;height:28px;background:#111;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.55rem;color:#666">0</div>
+            <div style="width:28px;height:28px;background:#2d5a2d;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.55rem;color:#66bb6a">6</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:4px;align-items:center;font-size:0.7rem;margin-top:8px">
+          <span style="width:14px;height:14px;background:#111;border-radius:2px;display:inline-block"></span><span style="color:#888">0 flips</span>
+          <span style="width:14px;height:14px;background:#1a3a1a;border-radius:2px;display:inline-block"></span><span style="color:#888">1-5</span>
+          <span style="width:14px;height:14px;background:#2d5a2d;border-radius:2px;display:inline-block"></span><span style="color:#888">6-10</span>
+          <span style="width:14px;height:14px;background:#4caf50;border-radius:2px;display:inline-block"></span><span style="color:#888">11+</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Intensity Grid (same layout as BitGrid)</h3>
+      <p>Same 8-bit-per-row grid. Cell intensity proportional to flip count. Green scale (dark for few flips, bright green for many). Shows exact flip count per cell. Consistent with BitGrid.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="bars" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="padding:16px;background:#1a1a2e">
+        <div style="font-size:0.7rem;color:#888;margin-bottom:6px">Flip count per bit position:</div>
+        <div style="display:flex;align-items:flex-end;gap:4px;height:80px;padding:0 4px">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+            <div style="width:12px;background:#4caf50;border-radius:2px 2px 0 0;height:4px"></div>
+            <span style="font-size:0.55rem;color:#888">0</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+            <div style="width:12px;background:#4caf50;border-radius:2px 2px 0 0;height:20px"></div>
+            <span style="font-size:0.55rem;color:#888">3</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+            <div style="width:12px;background:#4caf50;border-radius:2px 2px 0 0;height:48px"></div>
+            <span style="font-size:0.55rem;color:#888">7</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+            <div style="width:12px;background:#4caf50;border-radius:2px 2px 0 0;height:8px"></div>
+            <span style="font-size:0.55rem;color:#888">1</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+            <div style="width:12px;background:#4caf50;border-radius:2px 2px 0 0;height:80px"></div>
+            <span style="font-size:0.55rem;color:#888">15</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+            <div style="width:12px;background:#4caf50;border-radius:2px 2px 0 0;height:12px"></div>
+            <span style="font-size:0.55rem;color:#888">2</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+            <div style="width:12px;background:#4caf50;border-radius:2px 2px 0 0;height:32px"></div>
+            <span style="font-size:0.55rem;color:#888">5</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+            <div style="width:12px;background:#4caf50;border-radius:2px 2px 0 0;height:0"></div>
+            <span style="font-size:0.55rem;color:#888">0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Bar Chart (linear)</h3>
+      <p>One bar per bit. Height = flip count. Quick to see which bits are most active. But loses the byte-row spatial structure that CAN engineers think in.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="heatboth" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="padding:16px;background:#1a1a2e">
+        <div style="font-size:0.7rem;color:#888;margin-bottom:4px">Grid:</div>
+        <div style="display:flex;gap:2px;margin-bottom:4px">
+          <div style="display:flex;gap:2px">
+            <div style="width:20px;height:20px;background:#111;border-radius:3px"></div>
+            <div style="width:20px;height:20px;background:#1a3a1a;border-radius:3px"></div>
+            <div style="width:20px;height:20px;background:#2d5a2d;border-radius:3px"></div>
+            <div style="width:20px;height:20px;background:#111;border-radius:3px"></div>
+            <div style="width:20px;height:20px;background:#4caf50;border-radius:3px"></div>
+            <div style="width:20px;height:20px;background:#1a3a1a;border-radius:3px"></div>
+            <div style="width:20px;height:20px;background:#2d5a2d;border-radius:3px"></div>
+            <div style="width:20px;height:20px;background:#111;border-radius:3px"></div>
+          </div>
+        </div>
+        <div style="font-size:0.7rem;color:#888;margin-top:8px;margin-bottom:4px">Bars:</div>
+        <div style="display:flex;align-items:flex-end;gap:2px;height:40px">
+          <div style="width:8px;background:#4caf50;border-radius:2px 2px 0 0;height:0"></div>
+          <div style="width:8px;background:#4caf50;border-radius:2px 2px 0 0;height:8px"></div>
+          <div style="width:8px;background:#4caf50;border-radius:2px 2px 0 0;height:20px"></div>
+          <div style="width:8px;background:#4caf50;border-radius:2px 2px 0 0;height:2px"></div>
+          <div style="width:8px;background:#4caf50;border-radius:2px 2px 0 0;height:40px"></div>
+          <div style="width:8px;background:#4caf50;border-radius:2px 2px 0 0;height:5px"></div>
+          <div style="width:8px;background:#4caf50;border-radius:2px 2px 0 0;height:14px"></div>
+          <div style="width:8px;background:#4caf50;border-radius:2px 2px 0 0;height:0"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Grid + Mini Bars (combo)</h3>
+      <p>Intensity grid for spatial layout, mini bar chart below for at-a-glance ranking. Grid preserves byte thinking; bars make the relative activity immediately comparable.</p>
+    </div>
+  </div>
+</div>

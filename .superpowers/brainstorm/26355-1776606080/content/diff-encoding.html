@@ -1,0 +1,150 @@
+<h2>Bit Flip Diff: Visual Encoding</h2>
+<p class="subtitle">How should the bit-flip diff between consecutive frames be rendered?</p>
+
+<div class="cards">
+  <div class="card" data-choice="grid" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="padding:16px;background:#1a1a2e">
+        <div style="display:flex;gap:2px;margin-bottom:4px">
+          <span style="color:#888;font-size:0.7rem;width:28px">B0</span>
+          <div style="display:flex;gap:2px">
+            <div style="width:28px;height:28px;background:#333;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#888">0</div>
+            <div style="width:28px;height:28px;background:#4caf50;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#fff">1</div>
+            <div style="width:28px;height:28px;background:#ef5350;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#fff">0</div>
+            <div style="width:28px;height:28px;background:#333;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#888">0</div>
+            <div style="width:28px;height:28px;background:#4caf50;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#fff">1</div>
+            <div style="width:28px;height:28px;background:#333;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#888">0</div>
+            <div style="width:28px;height:28px;background:#ef5350;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#fff">0</div>
+            <div style="width:28px;height:28px;background:#333;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#888">0</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:2px;margin-bottom:4px">
+          <span style="color:#888;font-size:0.7rem;width:28px">B1</span>
+          <div style="display:flex;gap:2px">
+            <div style="width:28px;height:28px;background:#4caf50;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#fff">1</div>
+            <div style="width:28px;height:28px;background:#333;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#888">1</div>
+            <div style="width:28px;height:28px;background:#333;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#888">1</div>
+            <div style="width:28px;height:28px;background:#4caf50;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#fff">0</div>
+            <div style="width:28px;height:28px;background:#333;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#888">1</div>
+            <div style="width:28px;height:28px;background:#4caf50;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#fff">0</div>
+            <div style="width:28px;height:28px;background:#333;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#888">1</div>
+            <div style="width:28px;height:28px;background:#ef5350;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#fff">1</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;margin-top:12px;font-size:0.75rem">
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:14px;background:#4caf50;border-radius:2px;display:inline-block"></span> 0→1</span>
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:14px;background:#ef5350;border-radius:2px;display:inline-block"></span> 1→0</span>
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:14px;background:#333;border-radius:2px;display:inline-block"></span> No change</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Grid (like existing BitGrid)</h3>
+      <p>Same 8-bit-per-row grid layout as the existing BitGrid component. Green cells for 0→1, red for 1→0, dark gray for no change. Each cell shows the current bit value. Consistent with existing UI language.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="strip" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="padding:16px;background:#1a1a2e">
+        <div style="font-size:0.75rem;color:#888;margin-bottom:4px">Frame 1423 → 1424</div>
+        <div style="display:flex;gap:1px;margin-bottom:8px">
+          <div style="flex:1;height:8px;background:#333"></div>
+          <div style="flex:1;height:8px;background:#4caf50"></div>
+          <div style="flex:1;height:8px;background:#ef5350"></div>
+          <div style="flex:1;height:8px;background:#333"></div>
+          <div style="flex:1;height:8px;background:#4caf50"></div>
+          <div style="flex:1;height:8px;background:#333"></div>
+          <div style="flex:1;height:8px;background:#ef5350"></div>
+          <div style="flex:1;height:8px;background:#333"></div>
+        </div>
+        <div style="font-size:0.75rem;color:#888;margin-bottom:4px">Frame 1424 → 1425</div>
+        <div style="display:flex;gap:1px;margin-bottom:8px">
+          <div style="flex:1;height:8px;background:#4caf50"></div>
+          <div style="flex:1;height:8px;background:#333"></div>
+          <div style="flex:1;height:8px;background:#333"></div>
+          <div style="flex:1;height:8px;background:#4caf50"></div>
+          <div style="flex:1;height:8px;background:#333"></div>
+          <div style="flex:1;height:8px;background:#4caf50"></div>
+          <div style="flex:1;height:8px;background:#333"></div>
+          <div style="flex:1;height:8px;background:#ef5350"></div>
+        </div>
+        <div style="font-size:0.75rem;color:#888;margin-bottom:4px">Frame 1425 → 1426</div>
+        <div style="display:flex;gap:1px">
+          <div style="flex:1;height:8px;background:#333"></div>
+          <div style="flex:1;height:8px;background:#4caf50"></div>
+          <div style="flex:1;height:8px;background:#333"></div>
+          <div style="flex:1;height:8px;background:#ef5350"></div>
+          <div style="flex:1;height:8px;background:#4caf50"></div>
+          <div style="flex:1;height:8px;background:#ef5350"></div>
+          <div style="flex:1;height:8px;background:#333"></div>
+          <div style="flex:1;height:8px;background:#333"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Strip (compact timeline)</h3>
+      <p>Each consecutive pair shown as a thin colored strip. More compact — can show many transitions in a small space. Harder to see individual bit values, but patterns emerge visually. Like a flame graph for bits.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="both" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="padding:16px;background:#1a1a2e">
+        <div style="font-size:0.7rem;color:#888;margin-bottom:4px">Diff (current pair):</div>
+        <div style="display:flex;gap:2px">
+          <span style="color:#888;font-size:0.7rem;width:28px">B0</span>
+          <div style="display:flex;gap:2px">
+            <div style="width:28px;height:28px;background:#333;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#888">0</div>
+            <div style="width:28px;height:28px;background:#4caf50;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#fff">1</div>
+            <div style="width:28px;height:28px;background:#ef5350;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#fff">0</div>
+            <div style="width:28px;height:28px;background:#333;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#888">0</div>
+            <div style="width:28px;height:28px;background:#4caf50;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#fff">1</div>
+            <div style="width:28px;height:28px;background:#333;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#888">0</div>
+            <div style="width:28px;height:28px;background:#ef5350;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#fff">0</div>
+            <div style="width:28px;height:28px;background:#333;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:0.6rem;color:#888">0</div>
+          </div>
+        </div>
+        <div style="font-size:0.7rem;color:#888;margin-top:8px;margin-bottom:4px">History (scrollable):</div>
+        <div style="display:flex;gap:1px;margin-bottom:4px">
+          <div style="flex:1;height:6px;background:#333"></div>
+          <div style="flex:1;height:6px;background:#4caf50"></div>
+          <div style="flex:1;height:6px;background:#ef5350"></div>
+          <div style="flex:1;height:6px;background:#4caf50"></div>
+          <div style="flex:1;height:6px;background:#333"></div>
+          <div style="flex:1;height:6px;background:#4caf50"></div>
+          <div style="flex:1;height:6px;background:#ef5350"></div>
+          <div style="flex:1;height:6px;background:#333"></div>
+        </div>
+        <div style="display:flex;gap:1px;margin-bottom:4px">
+          <div style="flex:1;height:6px;background:#4caf50"></div>
+          <div style="flex:1;height:6px;background:#333"></div>
+          <div style="flex:1;height:6px;background:#4caf50"></div>
+          <div style="flex:1;height:6px;background:#ef5350"></div>
+          <div style="flex:1;height:6px;background:#333"></div>
+          <div style="flex:1;height:6px;background:#333"></div>
+          <div style="flex:1;height:6px;background:#4caf50"></div>
+          <div style="flex:1;height:6px;background:#333"></div>
+        </div>
+        <div style="display:flex;gap:1px">
+          <div style="flex:1;height:6px;background:#ef5350"></div>
+          <div style="flex:1;height:6px;background:#4caf50"></div>
+          <div style="flex:1;height:6px;background:#333"></div>
+          <div style="flex:1;height:6px;background:#4caf50"></div>
+          <div style="flex:1;height:6px;background:#333"></div>
+          <div style="flex:1;height:6px;background:#ef5350"></div>
+          <div style="flex:1;height:6px;background:#333"></div>
+          <div style="flex:1;height:6px;background:#4caf50"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Both (Grid + Strip)</h3>
+      <p>Grid for the current adjacent pair (detailed view with bit values), compact strip timeline below for recent flips. Best of both worlds: detail when paused, pattern view when scrolling. Strip rows correspond to playback position.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Detail + overview simultaneously</li><li>Grid matches existing BitGrid language</li><li>Strip shows patterns across time</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Two views to maintain</li><li>More vertical space</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
