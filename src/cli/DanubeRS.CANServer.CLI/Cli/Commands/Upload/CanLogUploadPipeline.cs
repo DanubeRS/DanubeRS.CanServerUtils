@@ -69,9 +69,18 @@ public sealed class CanLogUploadPipeline(
         }
 
         readerBlock.Complete();
-        
+
         if (_rateLimiter != null)
-            _rateLimiter.Flush();
+        {
+            var flushedPoints = _rateLimiter.Flush();
+            if (flushedPoints.Count > 0)
+            {
+                foreach (var point in flushedPoints)
+                {
+                    await batcherBlock.SendAsync(point, cancellationToken);
+                }
+            }
+        }
 
         await uploaderBlock.Completion.WaitAsync(cancellationToken);
 

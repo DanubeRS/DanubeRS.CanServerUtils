@@ -48,7 +48,11 @@ public sealed class SignalRateLimiter(RateLimitResolver resolver, ILogger<Signal
         var existingState = _state.GetOrAdd(key, _ => new SignalWindowState(
             timestampMs,
             rule.WindowMs,
-            rule.Aggregate));
+            rule.Aggregate,
+            signalName,
+            unit,
+            tags,
+            timestampMs));
 
         if (timestampMs - existingState.WindowStart >= rule.WindowMs)
         {
@@ -59,7 +63,11 @@ public sealed class SignalRateLimiter(RateLimitResolver resolver, ILogger<Signal
             _state[key] = new SignalWindowState(
                 timestampMs,
                 rule.WindowMs,
-                rule.Aggregate);
+                rule.Aggregate,
+                signalName,
+                unit,
+                tags,
+                timestampMs);
 
             return (BuildPoint(signalName, emittedValue, unit, tags, timestamp), true);
         }
@@ -125,8 +133,10 @@ public sealed class SignalRateLimiter(RateLimitResolver resolver, ILogger<Signal
         return (sorted[midIndex] + sorted[midIndex + 1]) / 2.0;
     }
 
-   public void Flush()
+   public List<PointData> Flush()
     {
+        var flushedPoints = new List<PointData>();
+
         foreach (var kvp in _state)
         {
             if (kvp.Value.Values.Count > 0)
@@ -136,18 +146,31 @@ public sealed class SignalRateLimiter(RateLimitResolver resolver, ILogger<Signal
                 Interlocked.Increment(ref _pointsEmitted);
                 Interlocked.Increment(ref _windowsClosed);
 
+                if (kvp.Value.SignalName != null && kvp.Value.Tags != null)
+                {
+                    var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(kvp.Value.LastTimestampMs);
+                    var point = BuildPoint(kvp.Value.SignalName, aggregatedValue, kvp.Value.Unit ?? "", kvp.Value.Tags, timestamp);
+                    flushedPoints.Add(point);
+                }
+
                 if (_logger?.IsEnabled(LogLevel.Debug) == true)
                     _logger.LogDebug("Flushed remaining window {Key} with {Count} values -> {Agg}", 
                         kvp.Key, kvp.Value.Values.Count, aggregatedValue);
             }
         }
+
+        return flushedPoints;
     }
 }
 
 public record SignalWindowState(
     long WindowStart,
     int WindowMs,
-    AggregateMode AggregateMode)
+    AggregateMode AggregateMode,
+    string? SignalName = null,
+    string? Unit = null,
+    Dictionary<string, string>? Tags = null,
+    long LastTimestampMs = 0)
 {
     public List<double> Values { get; } = new();
 }

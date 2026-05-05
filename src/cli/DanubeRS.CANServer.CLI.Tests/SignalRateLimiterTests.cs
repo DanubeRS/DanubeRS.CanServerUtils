@@ -209,18 +209,38 @@ public class SignalRateLimiterTests
 
         var t1 = DateTimeOffset.UtcNow;
 
-        // Add values but don't trigger expiry (window is 500ms)
         limiter.TryProcessPoint(60.0, "Speed", 512, "km/h", CreateTestTags(), t1);
         limiter.TryProcessPoint(62.0, "Speed", 513, "km/h", CreateTestTags(), t1.AddMilliseconds(10));
 
-        // Assert before flush
         limiter.PointsEmitted.Should().Be(0);
 
-        // Act - Flush remaining buffers
-        limiter.Flush();
+        var flushedPoints = limiter.Flush();
 
-        // Assert after flush
         limiter.PointsEmitted.Should().Be(2);
+        flushedPoints.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void Flush_ReturnsPointDataWithCorrectMetadata()
+    {
+        var config = new RateLimitConfig 
+        { 
+            Global = new GlobalRule { WindowMs = 500, Aggregate = AggregateMode.Last }, 
+            Frames = null 
+        };
+        var resolver = new RateLimitResolver(config);
+        var limiter = new SignalRateLimiter(resolver, NullLogger<SignalRateLimiter>.Instance);
+
+        var t1 = DateTimeOffset.UtcNow;
+        var tags = new Dictionary<string, string> { ["frame_id"] = "512", ["bus"] = "0" };
+
+        limiter.TryProcessPoint(60.0, "VehicleSpeed", 512, "km/h", tags, t1);
+        limiter.TryProcessPoint(62.0, "VehicleSpeed", 512, "km/h", tags, t1.AddMilliseconds(10));
+
+        var flushedPoints = limiter.Flush();
+
+        flushedPoints.Should().HaveCount(1);
+        limiter.PointsEmitted.Should().Be(1);
     }
 
     [Fact]
