@@ -187,4 +187,78 @@ public class ReaderAsyncTests
         frame.Should().NotBeNull();
         frame!.BusId.Should().Be(3);
     }
+
+    [Fact]
+    public async Task GetNextFrameAsync_V2TimeSync_SetsFirstTimestamp()
+    {
+        var syncTime = 1714908600000UL;
+        var timeSync = CreateV2TimeSyncFrame(syncTime);
+        var payload = new byte[] { 0x01 };
+        var dataFrame = CreateV2DataFrame(0xB0, 0x00, 0x00, 0x00, 0x00, 0x01, payload);
+
+        await using var stream = CreateV2Stream(timeSync.Concat(dataFrame).ToArray());
+        var reader = await Reader.Open(stream, NullLogger.Instance);
+
+        reader.Should().NotBeNull();
+        await reader!.GetNextFrameAsync(CancellationToken.None);
+
+        reader.FirstTimestamp.Should().NotBeNull();
+        reader.FirstTimestamp!.Value.ToUnixTimeMilliseconds().Should().Be((long)syncTime);
+    }
+
+    [Fact]
+    public async Task GetNextFrameAsync_V1TimeSync_SetsFirstTimestamp()
+    {
+        var syncTime = 1714908600000UL;
+        var timeSync = CreateV1TimeSyncFrame(syncTime);
+    var payload = new byte[] { 0xAA };
+    var dataFrame = CreateV1DataFrame(100, 0x100, 0x11, payload);
+
+        await using var stream = CreateV1Stream(timeSync.Concat(dataFrame).ToArray());
+        var reader = await Reader.Open(stream, NullLogger.Instance);
+
+        reader.Should().NotBeNull();
+        await reader!.GetNextFrameAsync(CancellationToken.None);
+
+        reader.FirstTimestamp.Should().NotBeNull();
+        reader.FirstTimestamp!.Value.ToUnixTimeMilliseconds().Should().Be((long)syncTime);
+    }
+
+    [Fact]
+    public async Task GetNextFrameAsync_NoTimeSync_FirstTimestampIsNull()
+    {
+        var payload = new byte[] { 0x01 };
+        var dataFrame = CreateV2DataFrame(0xB0, 0x00, 0x00, 0x00, 0x00, 0x01, payload);
+
+        await using var stream = CreateV2Stream(dataFrame);
+        var reader = await Reader.Open(stream, NullLogger.Instance);
+
+        reader.Should().NotBeNull();
+        await reader!.GetNextFrameAsync(CancellationToken.None);
+
+        reader.FirstTimestamp.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetNextFrameAsync_MultipleTimeSyncs_FirstTimestampIsFirstSync()
+    {
+        var firstSync = 1714908600000UL;
+        var secondSync = 1714912200000UL;
+        var payload = new byte[] { 0x01 };
+
+        var timeSync1 = CreateV2TimeSyncFrame(firstSync);
+        var dataFrame1 = CreateV2DataFrame(0xB0, 0x00, 0x00, 0x00, 0x00, 0x01, payload);
+        var timeSync2 = CreateV2TimeSyncFrame(secondSync);
+        var dataFrame2 = CreateV2DataFrame(0xB0, 0x00, 0x00, 0x00, 0x00, 0x01, payload);
+
+        await using var stream = CreateV2Stream(
+            timeSync1.Concat(dataFrame1).Concat(timeSync2).Concat(dataFrame2).ToArray());
+        var reader = await Reader.Open(stream, NullLogger.Instance);
+
+        reader.Should().NotBeNull();
+        await reader!.GetNextFrameAsync(CancellationToken.None);
+        await reader.GetNextFrameAsync(CancellationToken.None);
+
+        reader.FirstTimestamp!.Value.ToUnixTimeMilliseconds().Should().Be((long)firstSync);
+    }
 }

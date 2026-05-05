@@ -12,7 +12,10 @@ public class Reader : IAsyncDisposable, IDisposable
     private readonly ILogger _logger;
     private uint _logVersion = 0;
     private ulong _lastSyncTime = 0L;
+    private DateTimeOffset? _firstTimestamp;
     private bool _disposed = false;
+
+    public DateTimeOffset? FirstTimestamp => _firstTimestamp;
 
     public static async Task<Reader?> Open(Stream stream, ILogger logger)
     {
@@ -144,6 +147,7 @@ public class Reader : IAsyncDisposable, IDisposable
                 var timeSyncMem = buffer.AsMemory(0, 8);
                 await _stream.ReadExactlyAsync(timeSyncMem, cancellationToken);
                 _lastSyncTime = BitConverter.ToUInt64(timeSyncMem.Span);
+                _firstTimestamp ??= DateTimeOffset.FromUnixTimeMilliseconds((long)_lastSyncTime);
             }
             else if ((start & 0b11110000) == 0xB0)
             {
@@ -199,6 +203,7 @@ public class Reader : IAsyncDisposable, IDisposable
                     }
 
                     _lastSyncTime = BitConverter.ToUInt64(buffer, 0);
+                    _firstTimestamp ??= DateTimeOffset.FromUnixTimeMilliseconds((long)_lastSyncTime);
                     var nextByte = buffer.AsMemory(0, 1);
                     var read = await _stream.ReadAsync(nextByte, cancellationToken);
                     if (read == 0) return null;
