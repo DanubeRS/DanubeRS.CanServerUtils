@@ -1,11 +1,7 @@
 using System.CommandLine;
-using System.Diagnostics;
-using DanubeRS.CANServer.Lib.BinaryLogs;
-using DanubeRS.CanServerUtils.Lib;
-using DanubeRS.CANServer.CLI.Configuration;
 using DanubeRS.CANServer.CLI.Commands.Upload.RateLimiting;
+using DanubeRS.CANServer.CLI.Configuration;
 using InfluxDB.Client;
-using InfluxDB.Client.Api.Domain;
 using InfluxDB.Client.Writes;
 using Microsoft.Extensions.Logging;
 
@@ -24,7 +20,6 @@ public class UploadCommandHandler(
         var archiveDirectory = parseResult.GetValue(UploadOptions.ArchivePath.Instance);
 
         var watchInterval = parseResult.GetValue(UploadOptions.WatchInterval.Instance);
-        var signals = parseResult.GetValue(UploadOptions.Signals.Instance);
 
         var influxDbOptions = uploadOptions.InfluxDb;
         var influxClient = new InfluxDBClient(influxDbOptions.Endpoint.ToString(), influxDbOptions.Token);
@@ -34,22 +29,38 @@ public class UploadCommandHandler(
         {
             var writeApi = influxClient.GetWriteApiAsync();
             var database = await databaseFactory(uploadOptions.Databases ?? []);
+            var rateLimitConfig = await LoadRateLimitConfig(uploadOptions);
+
             while (!cancellationToken.IsCancellationRequested)
             {
                 var inputDir = inputPath ?? new DirectoryInfo(Directory.GetCurrentDirectory());
-                var files = inputDir.EnumerateFiles("*.log").OrderBy(f => f.Name);
+                var files = inputDir.EnumerateFiles("*.log").OrderBy(f => f.Name).ToArray();
 
-                foreach (var file in files)
+                if (files.Length > 0)
                 {
                     try
                     {
-                        await ParseFileInternal(file, database, writeApi, uploadOptions);
+                        var pipeline = new CanLogUploadPipeline(
+                            database,
+                            writeApi,
+                            uploadOptions.InfluxDb.Bucket!,
+                            uploadOptions.InfluxDb.Org!,
+                            uploadOptions.Signals?.Any() == true ? uploadOptions.Signals : null,
+                            uploadOptions.BatchSize,
+                            pipelineLogger,
+                            rateLimitConfig);
+
+                        await pipeline.ProcessFilesAsync(files, cancellationToken);
+
                         if (archiveDirectory != null)
-                            file.MoveTo(Path.Combine(archiveDirectory.FullName, file.Name));
+                        {
+                            foreach (var file in files)
+                                file.MoveTo(Path.Combine(archiveDirectory.FullName, file.Name));
+                        }
                     }
                     catch (Exception ex)
                     {
-                        logger.LogError(ex, "Failed to process file {FileName}", file.Name);
+                        logger.LogError(ex, "Failed to process file batch");
                     }
                 }
 
@@ -65,25 +76,6 @@ public class UploadCommandHandler(
         {
             influxClient.Dispose();
         }
-    }
-
-
-    private async Task ParseFileInternal(FileInfo fileInfo,
-        Database database, WriteApiAsync writeApiAsync, UploadOptionsValues uploadOptions)
-    {
-        var rateLimitConfig = await LoadRateLimitConfig(uploadOptions);
-
-        var pipeline = new CanLogUploadPipeline(
-            database,
-            writeApiAsync,
-            uploadOptions.InfluxDb.Bucket!,
-            uploadOptions.InfluxDb.Org!,
-            uploadOptions.Signals?.Any() == true ? uploadOptions.Signals : null,
-            uploadOptions.BatchSize,
-            pipelineLogger,
-            rateLimitConfig);
-
-        await pipeline.ProcessFilesAsync(new[] { fileInfo }, default);
     }
 
     private async Task<RateLimitConfig?> LoadRateLimitConfig(UploadOptionsValues options)
@@ -105,7 +97,6 @@ public class UploadCommandHandler(
             return result.Value;
         }
 
-       // Only --global-window specified without YAML file
         return new RateLimitConfig
         {
             Global = new GlobalRule { WindowMs = options.GlobalWindow!.Value, Aggregate = AggregateMode.Last },
