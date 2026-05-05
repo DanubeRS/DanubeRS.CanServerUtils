@@ -50,21 +50,11 @@ public class UploadCommandHandler(
                             pipelineLogger,
                             rateLimitConfig);
 
-                        await pipeline.ProcessFilesAsync(files, cancellationToken);
+                        var results = await pipeline.ProcessFilesAsync(files, cancellationToken);
 
                         if (archiveDirectory != null)
                         {
-                            foreach (var file in files)
-                            {
-                                try
-                                {
-                                    file.MoveTo(Path.Combine(archiveDirectory.FullName, file.Name));
-                                }
-                                catch (Exception ex)
-                                {
-                                    logger.LogError(ex, "Failed to archive file {FileName}", file.Name);
-                                }
-                            }
+                            ArchiveFiles(results, archiveDirectory);
                         }
                     }
                     catch (Exception ex)
@@ -111,5 +101,41 @@ public class UploadCommandHandler(
             Global = new GlobalRule { WindowMs = options.GlobalWindow!.Value, Aggregate = AggregateMode.Last },
             Frames = null
         };
+    }
+
+    private void ArchiveFiles(List<FileProcessingResult> results, FileInfo archiveDirectory)
+    {
+        var timestampCounts = new Dictionary<string, int>();
+
+        foreach (var result in results)
+        {
+            var timestamp = result.FirstTimestamp ?? result.File.CreationTime;
+            var timestampKey = timestamp.ToLocalTime().ToString("yyyy-MM-ddTHH-mm-ss");
+
+            if (!timestampCounts.TryGetValue(timestampKey, out int increment))
+            {
+                increment = 0;
+            }
+
+            if (increment > 9)
+            {
+                logger.LogError("Cannot archive file {FileName}: more than 10 files share timestamp {TimestampKey}", result.File.Name, timestampKey);
+                continue;
+            }
+
+            var archiveFileName = $"{timestampKey}_{increment}.log";
+            var archivePath = Path.Combine(archiveDirectory.FullName, archiveFileName);
+
+            try
+            {
+                result.File.MoveTo(archivePath);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to archive file {FileName} to {ArchivePath}", result.File.Name, archivePath);
+            }
+
+            timestampCounts[timestampKey] = increment + 1;
+        }
     }
 }
