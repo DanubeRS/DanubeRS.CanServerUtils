@@ -21,11 +21,10 @@ public sealed class CanLogUploadPipeline(
     ILogger<CanLogUploadPipeline> logger,
     RateLimitConfig? rateLimitConfig = null)
 {
-    private readonly ConcurrentBag<DecodeError> _decodeErrors = new();
+    private long _decodeErrorCount;
+    private readonly ConcurrentDictionary<uint, byte> _decodeErrorIds = new();
     private long _totalPointsUploaded;
     private readonly SignalRateLimiter? _rateLimiter = rateLimitConfig != null ? new(new RateLimitResolver(rateLimitConfig)) : null;
-
-    internal IReadOnlyCollection<DecodeError> Errors => _decodeErrors;
 
     public async Task ProcessFilesAsync(IEnumerable<FileInfo> files, CancellationToken cancellationToken)
     {
@@ -100,9 +99,11 @@ public sealed class CanLogUploadPipeline(
                     windowsClosed, windowsClosed > 0 ? (double)emitted / windowsClosed : 0);
         }
 
-        if (_decodeErrors.Count > 0)
+        var errorCount = Interlocked.Read(ref _decodeErrorCount);
+        if (errorCount > 0)
         {
-            logger.LogWarning("{ErrorCount} frames failed to decode", _decodeErrors.Count);
+            var errorIds = string.Join(", ", _decodeErrorIds.Keys.Select(id => $"0x{id:X8}"));
+            logger.LogWarning("{ErrorCount} frames failed to decode. Frame IDs: {FrameIds}", errorCount, errorIds);
         }
     }
 
@@ -149,7 +150,8 @@ public sealed class CanLogUploadPipeline(
 
             if (!database.TryParseBinaryMessage(frame.FrameId, frame.Payload, out var value, out var defn))
             {
-                _decodeErrors.Add(new DecodeError(frame.FrameId, $"Unknown frame ID: 0x{frame.FrameId:X8}"));
+                Interlocked.Increment(ref _decodeErrorCount);
+                _decodeErrorIds.TryAdd(frame.FrameId, 0);
                 return null!;
             }
 
@@ -273,8 +275,7 @@ public sealed class CanLogUploadPipeline(
         });
     }
 
-    internal record DecodeError(uint FrameId, string Message);
-    
+
     private record RawFrame(ulong Timestamp, uint FrameId, uint BusId, byte[] Payload, string SourceFileName);
     
     private record DecodedMessage(ulong Timestamp, uint BusId, MessageValue Value, Database.MessageDefinition Defn, string SourceFileName);
