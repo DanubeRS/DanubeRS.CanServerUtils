@@ -74,6 +74,7 @@ public sealed class SignalRateLimiter(RateLimitResolver resolver, ILogger<Signal
         else
         {
             existingState.Values.Add(value);
+            existingState.LastTimestampMs = timestampMs;
             return (null, false);
         }
     }
@@ -163,14 +164,21 @@ public sealed class SignalRateLimiter(RateLimitResolver resolver, ILogger<Signal
     }
 }
 
-public record SignalWindowState(
-    long WindowStart,
-    int WindowMs,
-    AggregateMode AggregateMode,
-    string? SignalName = null,
-    string? Unit = null,
-    Dictionary<string, string>? Tags = null,
-    long LastTimestampMs = 0)
+public class SignalWindowState(
+    long windowStart,
+    int windowMs,
+    AggregateMode aggregateMode,
+    string? signalName = null,
+    string? unit = null,
+    Dictionary<string, string>? tags = null,
+    long lastTimestampMs = 0)
 {
+    public long WindowStart { get; } = windowStart;
+    public int WindowMs { get; } = windowMs;
+    public AggregateMode AggregateMode { get; } = aggregateMode;
+    public string? SignalName { get; } = signalName;
+    public string? Unit { get; } = unit;
+    public Dictionary<string, string>? Tags { get; } = tags;
+    public long LastTimestampMs { get; set; } = lastTimestampMs;
     public List<double> Values { get; } = new();
 }

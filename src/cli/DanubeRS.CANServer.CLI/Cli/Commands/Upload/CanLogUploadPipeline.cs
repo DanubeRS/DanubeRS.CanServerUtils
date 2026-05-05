@@ -56,7 +56,7 @@ public sealed class CanLogUploadPipeline(
         readerBlock.LinkTo(decoderBlock, new DataflowLinkOptions { PropagateCompletion = true });
         decoderBlock.LinkTo(filterConverterBlock, new DataflowLinkOptions { PropagateCompletion = true });
         filterConverterBlock.LinkTo(rateLimiterTarget, new DataflowLinkOptions { PropagateCompletion = true });
-        rateLimiterSource.LinkTo(batcherBlock, new DataflowLinkOptions { PropagateCompletion = true });
+        rateLimiterSource.LinkTo(batcherBlock, new DataflowLinkOptions { PropagateCompletion = false });
         batcherBlock.LinkTo(uploaderBlock, new DataflowLinkOptions { PropagateCompletion = true });
 
         var totalStopwatch = Stopwatch.StartNew();
@@ -84,6 +84,7 @@ public sealed class CanLogUploadPipeline(
             }
         }
 
+        batcherBlock.Complete();
         await uploaderBlock.Completion.WaitAsync(cancellationToken);
 
         totalStopwatch.Stop();

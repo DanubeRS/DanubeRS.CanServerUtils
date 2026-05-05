@@ -55,7 +55,16 @@ public class UploadCommandHandler(
                         if (archiveDirectory != null)
                         {
                             foreach (var file in files)
-                                file.MoveTo(Path.Combine(archiveDirectory.FullName, file.Name));
+                            {
+                                try
+                                {
+                                    file.MoveTo(Path.Combine(archiveDirectory.FullName, file.Name));
+                                }
+                                catch (Exception ex)
+                                {
+                                    logger.LogError(ex, "Failed to archive file {FileName}", file.Name);
+                                }
+                            }
                         }
                     }
                     catch (Exception ex)
