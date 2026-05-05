@@ -121,9 +121,7 @@ public sealed class CanLogUploadPipeline(
 
         while (true)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            
-            var frame = reader.GetNextFrame();
+            var frame = await reader.GetNextFrameAsync(cancellationToken);
             if (frame == null) break;
 
             await readerBlock.SendAsync(new FrameWithContext(frame, file.Name), cancellationToken);

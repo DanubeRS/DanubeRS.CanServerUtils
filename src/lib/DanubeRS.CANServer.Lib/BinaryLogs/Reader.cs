@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 using DanubeRS.CANServer.Lib.Downloader;
 using DanubeRS.CANServer.Lib.Pandas;
@@ -86,6 +87,142 @@ public class Reader : IAsyncDisposable, IDisposable
                 case 1: return ReadV1Frame((byte)frameStart);
                 case 2: return ReadV2Frame((byte)frameStart);
                 default: return null;
+            }
+        }
+    }
+
+    public async Task<LogReaderFrame?> GetNextFrameAsync(CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        var buffer = ArrayPool<byte>.Shared.Rent(HeaderSize);
+        try
+        {
+            while (true)
+            {
+                var singleByte = buffer.AsMemory(0, 1);
+                var read = await _stream.ReadAsync(singleByte, cancellationToken);
+                if (read == 0) return null;
+                var frameStart = buffer[0];
+
+                switch (frameStart)
+                {
+                    case 0x43:
+                        var splitHeader = buffer.AsMemory(0, HeaderSize);
+                        splitHeader.Span[0] = (byte)frameStart;
+                        await _stream.ReadExactlyAsync(splitHeader[1..], cancellationToken);
+                        var logVersion = LogVersionFromBuffer(splitHeader.Span);
+                        if (logVersion == 0)
+                        {
+                            _stream.Seek(-(HeaderSize - 1), SeekOrigin.Current);
+                            continue;
+                        }
+                        _logVersion = logVersion;
+                        break;
+                }
+
+                switch (_logVersion)
+                {
+                    case 1: return await ReadV1FrameAsync((byte)frameStart, buffer, cancellationToken);
+                    case 2: return await ReadV2FrameAsync((byte)frameStart, buffer, cancellationToken);
+                    default: return null;
+                }
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    private async Task<LogReaderFrame?> ReadV2FrameAsync(byte start, byte[] buffer, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            if (start == 0xA0)
+            {
+                var timeSyncMem = buffer.AsMemory(0, 8);
+                await _stream.ReadExactlyAsync(timeSyncMem, cancellationToken);
+                _lastSyncTime = BitConverter.ToUInt64(timeSyncMem.Span);
+            }
+            else if ((start & 0b11110000) == 0xB0)
+            {
+                var frameDataMem = buffer.AsMemory(0, 5);
+                await _stream.ReadExactlyAsync(frameDataMem, cancellationToken);
+
+                var frameTimeOffset = (start & 0x0F) + (buffer[0] << 4) + (buffer[1] << 12) +
+                                       (((buffer[2] & 0xF8) >> 3) << 20);
+                var frameTime = _lastSyncTime + (ulong)frameTimeOffset;
+
+                var frameId = ((buffer[2] & 0x07) << 8) + (buffer[3] & 0xFF);
+                byte frameLength = (byte)Math.Clamp(buffer[4] & 0x0F, 0, 8);
+
+                var busId = (buffer[4] & 0xF0) >> 4;
+                var framePayload = new byte[frameLength];
+                await _stream.ReadExactlyAsync(framePayload, cancellationToken);
+
+                return new LogReaderFrame(frameTime, (uint)frameId, (uint)busId, framePayload);
+            }
+            else
+            {
+                _logger.LogDebug("Skipping unknown v2 frame byte 0x{Byte:X2}", start);
+            }
+
+            var nextByte = buffer.AsMemory(0, 1);
+            var read = await _stream.ReadAsync(nextByte, cancellationToken);
+            if (read == 0) return null;
+            start = buffer[0];
+        }
+    }
+
+    private async Task<LogReaderFrame?> ReadV1FrameAsync(byte start, byte[] buffer, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            switch (start)
+            {
+                case 0xcd:
+                    throw new NotImplementedException("Marks not supported (yet)");
+                case 0xce:
+                    try
+                    {
+                        var timeSyncMem = buffer.AsMemory(0, 8);
+                        await _stream.ReadExactlyAsync(timeSyncMem, cancellationToken);
+                    }
+                    catch (EndOfStreamException e)
+                    {
+                        throw new InvalidFrameException("Time sync payload is the wrong length", _stream.Position, e);
+                    }
+
+                    _lastSyncTime = BitConverter.ToUInt64(buffer, 0);
+                    var nextByte = buffer.AsMemory(0, 1);
+                    var read = await _stream.ReadAsync(nextByte, cancellationToken);
+                    if (read == 0) return null;
+                    start = buffer[0];
+                    break;
+                case 0xcf:
+                    var frameDataMem = buffer.AsMemory(0, 5);
+                    await _stream.ReadExactlyAsync(frameDataMem, cancellationToken);
+
+                    var frameTimeOffset =
+                        BitConverter.ToUInt16(buffer, 0) * 1000;
+
+                    var frameTime = _lastSyncTime + (ulong)frameTimeOffset;
+
+                    var frameId = BitConverter.ToUInt16(buffer, 2);
+                    byte frameLength = (byte)Math.Clamp(buffer[4] & 0x0F, 0, 8);
+                    var busId = (buffer[4] & 0xF0) >> 4;
+
+                    var framePayload = new byte[frameLength];
+                    await _stream.ReadExactlyAsync(framePayload, cancellationToken);
+                    return new LogReaderFrame(frameTime, frameId, (uint)busId, framePayload);
+                default:
+                    _logger.LogDebug("Skipping unknown v1 frame byte 0x{Byte:X2}", start);
+                    var next = buffer.AsMemory(0, 1);
+                    var nextRead = await _stream.ReadAsync(next, cancellationToken);
+                    if (nextRead == 0) return null;
+                    start = buffer[0];
+                    break;
             }
         }
     }
