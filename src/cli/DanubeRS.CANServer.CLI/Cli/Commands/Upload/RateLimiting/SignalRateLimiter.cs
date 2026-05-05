@@ -142,12 +142,12 @@ public sealed class SignalRateLimiter(RateLimitResolver resolver, ILogger<Signal
             if (kvp.Value.Values.Count > 0)
             {
                 var aggregatedValue = ComputeAggregate(kvp.Value.Values, kvp.Value.AggregateMode);
-                
-                Interlocked.Increment(ref _pointsEmitted);
-                Interlocked.Increment(ref _windowsClosed);
 
                 if (kvp.Value.SignalName != null && kvp.Value.Tags != null)
                 {
+                    Interlocked.Increment(ref _pointsEmitted);
+                    Interlocked.Increment(ref _windowsClosed);
+
                     var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(kvp.Value.LastTimestampMs);
                     var point = BuildPoint(kvp.Value.SignalName, aggregatedValue, kvp.Value.Unit ?? "", kvp.Value.Tags, timestamp);
                     flushedPoints.Add(point);

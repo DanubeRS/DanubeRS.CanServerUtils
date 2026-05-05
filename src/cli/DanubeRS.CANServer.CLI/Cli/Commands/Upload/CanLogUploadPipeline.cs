@@ -72,6 +72,8 @@ public sealed class CanLogUploadPipeline(
 
         if (_rateLimiter != null)
         {
+            await rateLimiterSource.Completion;
+
             var flushedPoints = _rateLimiter.Flush();
             if (flushedPoints.Count > 0)
             {
