@@ -148,7 +148,8 @@ public class Reader : IAsyncDisposable, IDisposable
             else if ((start & 0b11110000) == 0xB0)
             {
                 var frameDataMem = buffer.AsMemory(0, 5);
-                await _stream.ReadExactlyAsync(frameDataMem, cancellationToken);
+                var headerRead = await _stream.ReadAsync(frameDataMem, cancellationToken);
+                if (headerRead != 5) return null;
 
                 var frameTimeOffset = (start & 0x0F) + (buffer[0] << 4) + (buffer[1] << 12) +
                                        (((buffer[2] & 0xF8) >> 3) << 20);
@@ -159,7 +160,10 @@ public class Reader : IAsyncDisposable, IDisposable
 
                 var busId = (buffer[4] & 0xF0) >> 4;
                 var framePayload = new byte[frameLength];
-                await _stream.ReadExactlyAsync(framePayload, cancellationToken);
+                var read = await _stream.ReadAsync(framePayload, cancellationToken);
+                if (read != frameLength)
+                    throw new EndOfStreamException(
+                        $"Expected {frameLength} bytes but only read {read} at stream position {_stream.Position}");
 
                 return new LogReaderFrame(frameTime, (uint)frameId, (uint)busId, framePayload);
             }
@@ -169,8 +173,8 @@ public class Reader : IAsyncDisposable, IDisposable
             }
 
             var nextByte = buffer.AsMemory(0, 1);
-            var read = await _stream.ReadAsync(nextByte, cancellationToken);
-            if (read == 0) return null;
+            var nextRead = await _stream.ReadAsync(nextByte, cancellationToken);
+            if (nextRead == 0) return null;
             start = buffer[0];
         }
     }
