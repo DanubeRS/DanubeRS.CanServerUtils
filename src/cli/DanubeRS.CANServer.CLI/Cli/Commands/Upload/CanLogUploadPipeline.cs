@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks.Dataflow;
 using DanubeRS.CanServerUtils.Lib;
@@ -26,7 +27,7 @@ public sealed class CanLogUploadPipeline(
     private long _totalPointsUploaded;
     private readonly SignalRateLimiter? _rateLimiter = rateLimitConfig != null ? new(new RateLimitResolver(rateLimitConfig)) : null;
 
-    public async Task ProcessFilesAsync(IEnumerable<FileInfo> files, CancellationToken cancellationToken)
+    public async Task<List<FileProcessingResult>> ProcessFilesAsync(IEnumerable<FileInfo> files, CancellationToken cancellationToken)
     {
         var readerBlock = CreateReaderBlock();
         var decoderBlock = CreateDecoderBlock(database);
@@ -61,11 +62,13 @@ public sealed class CanLogUploadPipeline(
 
         var totalStopwatch = Stopwatch.StartNew();
         
+        var results = new List<FileProcessingResult>();
         foreach (var file in files)
         {
             if (cancellationToken.IsCancellationRequested) break;
 
-            await ProcessFileAsync(file, readerBlock, cancellationToken);
+            var result = await ProcessFileAsync(file, readerBlock, cancellationToken);
+            results.Add(result);
         }
 
         readerBlock.Complete();
@@ -117,9 +120,11 @@ public sealed class CanLogUploadPipeline(
             var errorIds = string.Join(", ", _decodeErrorIds.Keys.Select(id => $"0x{id:X8}"));
             logger.LogWarning("{ErrorCount} frames failed to decode. Frame IDs: {FrameIds}", errorCount, errorIds);
         }
+
+        return results;
     }
 
-    private async Task ProcessFileAsync(FileInfo file, ITargetBlock<FrameWithContext> readerBlock, CancellationToken cancellationToken)
+    private async Task<FileProcessingResult> ProcessFileAsync(FileInfo file, ITargetBlock<FrameWithContext> readerBlock, CancellationToken cancellationToken)
     {
         logger.LogInformation("Reading file {LogFileName}", file.FullName);
         
@@ -129,7 +134,7 @@ public sealed class CanLogUploadPipeline(
         if (reader == null)
         {
             logger.LogWarning("Could not open file {LogFileName}", file.FullName);
-            return;
+            return new FileProcessingResult(file, null);
         }
 
         while (true)
@@ -139,6 +144,8 @@ public sealed class CanLogUploadPipeline(
 
             await readerBlock.SendAsync(new FrameWithContext(frame, file.Name), cancellationToken);
         }
+
+        return new FileProcessingResult(file, reader.FirstTimestamp);
     }
 
     private TransformManyBlock<FrameWithContext, RawFrame> CreateReaderBlock()
@@ -302,3 +309,5 @@ public sealed class CanLogUploadPipeline(
         Dictionary<string, string> Tags,
         DateTimeOffset Timestamp);
 }
+
+public record FileProcessingResult(FileInfo File, DateTimeOffset? FirstTimestamp);
