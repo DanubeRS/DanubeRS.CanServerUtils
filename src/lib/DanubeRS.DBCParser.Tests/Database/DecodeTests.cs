@@ -186,4 +186,33 @@ public class DecodeTests
 
             """;
     }
+
+    [Fact]
+    public void SpanBasedDecode_MatchesBitArrayDecode()
+    {
+        var db = CreateDb();
+
+        var testPayloads = new byte[][]
+        {
+            new byte[8],
+            new byte[] { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF },
+            new byte[] { 0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x89 },
+            new byte[] { 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
+            new byte[] { 0x00, 0x01, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00 },
+        };
+
+        foreach (var data in testPayloads)
+        {
+            db.TryParseBinaryMessage(1, data, out var value, out _).Should().BeTrue();
+            value!.Signals.Should().HaveCount(4, because: $"payload {Convert.ToHexString(data)} should decode 4 signals");
+
+            var unsigned8 = value.Signals.First(s => s.SignalName == "Unsigned8").Value;
+            var unsigned16 = value.Signals.First(s => s.SignalName == "Unsigned16").Value;
+            var signed8 = value.Signals.First(s => s.SignalName == "Signed8").Value;
+            var signed16 = value.Signals.First(s => s.SignalName == "Signed16").Value;
+
+            unsigned8.Should().Be(data[0], because: "Unsigned8 is byte 0");
+            unsigned16.Should().Be(BitConverter.ToUInt16(data, 1), because: "Unsigned16 is bytes 1-2 little-endian");
+        }
+    }
 }

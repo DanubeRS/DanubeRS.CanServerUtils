@@ -6,6 +6,7 @@ using DanubeRS.CanServerUtils.Lib.Tokenizer;
 using DanubeRS.DBCParser;
 using Microsoft.Extensions.Logging;
 
+
 namespace DanubeRS.CanServerUtils.Lib;
 
 public class Database(ILogger<Database> logger)
@@ -104,15 +105,17 @@ public class Database(ILogger<Database> logger)
             return false;
         }
 
-        var bitArray = new BitArray(data);
         if (logger.IsEnabled(LogLevel.Trace))
+        {
+            var bitArray = new BitArray(data);
             logger.LogTrace("Frame 0x{FrameId:X3} ({MessageName}) Data\n{BitArrayData}",
                 defn.Header.Id, defn.Header.Name, GetBitArrayDataForLog(bitArray));
+        }
 
         return defn.IsMultiplexed switch
         {
-            true => Decoder.TryParseMultiplexedMessage(defn, bitArray, out value),
-            false => Decoder.TryParseRegularMessage(defn, bitArray, out value)
+            true => Decoder.TryParseMultiplexedMessage(defn, data, out value),
+            false => Decoder.TryParseRegularMessage(defn, data, out value)
         };
     }
 

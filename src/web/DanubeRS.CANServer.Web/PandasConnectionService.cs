@@ -157,10 +157,9 @@ public class PandasConnectionService
             };
         }
 
-        var bitArray = new System.Collections.BitArray(frame.Data);
         var success = defn.IsMultiplexed
-            ? CanServerUtils.Lib.Decoder.TryParseMultiplexedMessage(defn, bitArray, out var value)
-            : CanServerUtils.Lib.Decoder.TryParseRegularMessage(defn, bitArray, out value);
+            ? CanServerUtils.Lib.Decoder.TryParseMultiplexedMessage(defn, frame.Data, out var value)
+            : CanServerUtils.Lib.Decoder.TryParseRegularMessage(defn, frame.Data, out value);
 
         if (!success || value == null)
         {

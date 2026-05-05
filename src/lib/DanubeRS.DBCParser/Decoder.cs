@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using DanubeRS.CanServerUtils.Lib.Parser;
 using ValueType = DanubeRS.CanServerUtils.Lib.Parser.ValueType;
@@ -7,7 +6,12 @@ namespace DanubeRS.CanServerUtils.Lib;
 
 public static class Decoder
 {
-    public static SignalValue GetSignalValue(BitArray data, Database.SignalDefinition signal)
+    private static bool GetBit(ReadOnlySpan<byte> data, int bitIndex)
+    {
+        return (data[bitIndex >> 3] & (1 << (bitIndex & 7))) != 0;
+    }
+
+    public static SignalValue GetSignalValue(ReadOnlySpan<byte> data, Database.SignalDefinition signal)
     {
         Span<byte> signalValueBytes = stackalloc byte[8];
 
@@ -34,13 +38,14 @@ public static class Decoder
         return new SignalValue(signal.Signal.Name, signal.Signal.Offset + rawValue * signal.Signal.Factor);
     }
 
-    public static void ExtractBitsLittleEndian(BitArray bitArray, int startBit, int signalSize, Span<byte> outputBytes)
+    public static void ExtractBitsLittleEndian(ReadOnlySpan<byte> data, int startBit, int signalSize, Span<byte> outputBytes)
     {
         ulong value = 0;
+        var bitCount = data.Length * 8;
 
-        for (int i = 0; i < signalSize && startBit + i < bitArray.Length; i++)
+        for (int i = 0; i < signalSize && startBit + i < bitCount; i++)
         {
-            if (bitArray[startBit + i])
+            if (GetBit(data, startBit + i))
                 value |= (1UL << i);
         }
 
@@ -48,13 +53,14 @@ public static class Decoder
             outputBytes[i] = (byte)((value >> (i * 8)) & 0xFF);
     }
 
-    public static void ExtractBitsBigEndian(BitArray bitArray, int startBit, int signalSize, Span<byte> outputBytes)
+    public static void ExtractBitsBigEndian(ReadOnlySpan<byte> data, int startBit, int signalSize, Span<byte> outputBytes)
     {
         ulong value = 0;
+        var bitCount = data.Length * 8;
 
-        for (int i = 0; i < signalSize && startBit + i < bitArray.Length; i++)
+        for (int i = 0; i < signalSize && startBit + i < bitCount; i++)
         {
-            if (bitArray[startBit + i])
+            if (GetBit(data, startBit + i))
                 value |= (1UL << (signalSize - 1 - i));
         }
 
@@ -62,20 +68,22 @@ public static class Decoder
             outputBytes[i] = (byte)((value >> (i * 8)) & 0xFF);
     }
 
-    public static bool TryParseRegularMessage(Database.MessageDefinition defn, BitArray data, [NotNullWhen(true)] out MessageValue? value)
+    public static bool TryParseRegularMessage(Database.MessageDefinition defn, ReadOnlySpan<byte> data, [NotNullWhen(true)] out MessageValue? value)
     {
         value = null;
         if (defn.Signals.Count == 0) return true;
         var lastSignal = defn.Signals.OrderByDescending(s => s.Signal.StartBit).First();
-        if (lastSignal.Signal.StartBit + lastSignal.Signal.Size > data.Length) return false;
+        if (lastSignal.Signal.StartBit + lastSignal.Signal.Size > data.Length * 8) return false;
 
-        value = new MessageValue(defn.Header.Id, defn.Header.Name,
-            defn.SignalsByStartBit.Select(signal => GetSignalValue(data, signal)).ToArray(),
-            null);
+        var signals = new SignalValue[defn.SignalsByStartBit.Length];
+        for (int i = 0; i < defn.SignalsByStartBit.Length; i++)
+            signals[i] = GetSignalValue(data, defn.SignalsByStartBit[i]);
+
+        value = new MessageValue(defn.Header.Id, defn.Header.Name, signals, null);
         return true;
     }
 
-    public static bool TryParseMultiplexedMessage(Database.MessageDefinition defn, BitArray data, [NotNullWhen(true)] out MessageValue? value)
+    public static bool TryParseMultiplexedMessage(Database.MessageDefinition defn, ReadOnlySpan<byte> data, [NotNullWhen(true)] out MessageValue? value)
     {
         value = null;
 
@@ -119,10 +127,13 @@ public static class Decoder
         var lastSignal = filteredSignals.OrderByDescending(s => s.Signal.StartBit).FirstOrDefault();
         if (lastSignal == null) return false;
 
-        if (lastSignal.Signal.StartBit + lastSignal.Signal.Size > data.Length) return false;
+        if (lastSignal.Signal.StartBit + lastSignal.Signal.Size > data.Length * 8) return false;
 
-        value = new MessageValue(defn.Header.Id, defn.Header.Name,
-            filteredSignals.Select(signal => GetSignalValue(data, signal)).ToArray(), switchValue);
+        var signalValues = new SignalValue[filteredSignals.Length];
+        for (int i = 0; i < filteredSignals.Length; i++)
+            signalValues[i] = GetSignalValue(data, filteredSignals[i]);
+
+        value = new MessageValue(defn.Header.Id, defn.Header.Name, signalValues, switchValue);
 
         return true;
     }

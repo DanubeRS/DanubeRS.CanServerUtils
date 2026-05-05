@@ -300,11 +300,10 @@ app.MapGet("/api/log/decode-signal", async (uint frameId, string signalName, Can
     var timeSeries = new List<object>();
     foreach (var frame in frames)
     {
-        var bitArray = new BitArray(frame.FramePayload);
         MessageValue? value = null;
         var success = defn.IsMultiplexed
-            ? Decoder.TryParseMultiplexedMessage(defn, bitArray, out value)
-            : Decoder.TryParseRegularMessage(defn, bitArray, out value);
+            ? Decoder.TryParseMultiplexedMessage(defn, frame.FramePayload, out value)
+            : Decoder.TryParseRegularMessage(defn, frame.FramePayload, out value);
         if (!success || value == null) continue;
 
         var signalValue = value.Signals.FirstOrDefault(s => s.SignalName == signalName);
@@ -380,9 +379,8 @@ app.MapGet("/api/log/frames/{index}", async (int index, CanLogService logService
                 decoded = (object?)null
             });
 
-        var bitArray = new BitArray(frame.FramePayload);
         var decoded = editService.IsLoaded
-            ? Decoder.TryParseRegularMessage(defn, bitArray, out var value) || (defn.IsMultiplexed && Decoder.TryParseMultiplexedMessage(defn, bitArray, out value))
+            ? Decoder.TryParseRegularMessage(defn, frame.FramePayload, out var value) || (defn.IsMultiplexed && Decoder.TryParseMultiplexedMessage(defn, frame.FramePayload, out value))
                 ? (object?)new
                 {
                     messageName = value!.MessageName,
@@ -442,11 +440,10 @@ app.MapPost("/api/decode/preview", async (PreviewRequest request, CanLogService 
         try
         {
             var defn = await editService.BuildDefinitionWithOverridesAsync(frame.FrameId, overrides);
-            var bitArray = new BitArray(frame.FramePayload);
             MessageValue? value = null;
             var success = defn.IsMultiplexed
-                ? Decoder.TryParseMultiplexedMessage(defn, bitArray, out value)
-                : Decoder.TryParseRegularMessage(defn, bitArray, out value);
+                ? Decoder.TryParseMultiplexedMessage(defn, frame.FramePayload, out value)
+                : Decoder.TryParseRegularMessage(defn, frame.FramePayload, out value);
 
             if (!success || value == null)
                 return Results.Ok(new { decoded = (object?)null });
