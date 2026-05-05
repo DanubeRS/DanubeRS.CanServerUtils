@@ -247,6 +247,7 @@ public class Reader : IAsyncDisposable, IDisposable
             {
                 _stream.ReadExactly(timeSyncBuffer);
                 _lastSyncTime = BitConverter.ToUInt64(timeSyncBuffer);
+                _firstTimestamp ??= DateTimeOffset.FromUnixTimeMilliseconds((long)_lastSyncTime);
             }
             else if ((start & 0b11110000) == 0xB0)
             {
@@ -303,6 +304,7 @@ public class Reader : IAsyncDisposable, IDisposable
                     }
 
                     _lastSyncTime = BitConverter.ToUInt64(timeSyncBuffer);
+                    _firstTimestamp ??= DateTimeOffset.FromUnixTimeMilliseconds((long)_lastSyncTime);
                     var nextByte = _stream.ReadByte();
                     if (nextByte == -1) return null;
                     start = (byte)nextByte;
