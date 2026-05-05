@@ -120,4 +120,23 @@ public class ArchiveNamingTests : IDisposable
         var expectedKey = creationTime.ToLocalTime().ToString("yyyy-MM-ddTHH-mm-ss");
         archiveNames[0].Should().Be($"{expectedKey}_0.log");
     }
+
+    [Fact]
+    public void ArchiveNaming_DateDirectoryPath_IsCorrect()
+    {
+        var timestamp = new DateTimeOffset(2025, 1, 30, 14, 30, 0, TimeSpan.Zero);
+        var localTimestamp = timestamp.ToLocalTime();
+        var dateKey = localTimestamp.ToString("yyyy-MM-dd");
+        var timestampKey = localTimestamp.ToString("yyyy-MM-ddTHH-mm-ss");
+
+        dateKey.Should().MatchRegex(@"^\d{4}-\d{2}-\d{2}$");
+        timestampKey.Should().MatchRegex(@"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$");
+    }
+
+    [Fact]
+    public void ArchiveMode_HasExpectedValues()
+    {
+        ((int)ArchiveMode.Dir).Should().Be(0);
+        ((int)ArchiveMode.Tar).Should().Be(1);
+    }
 }

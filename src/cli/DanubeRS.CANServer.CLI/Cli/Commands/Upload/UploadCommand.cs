@@ -2,6 +2,12 @@ using System.CommandLine;
 
 namespace DanubeRS.CANServer.CLI.Commands.Upload;
 
+public enum ArchiveMode
+{
+    Dir,
+    Tar
+}
+
 public class UploadCommand : Command
 {
     public static UploadCommand Instance { get; } = new();
@@ -14,6 +20,7 @@ public class UploadCommand : Command
         Options.Add(UploadOptions.Database.Instance);
         Options.Add(UploadOptions.Signals.Instance);
         Options.Add(UploadOptions.WatchInterval.Instance);
+        Options.Add(UploadOptions.Archive.Instance);
         Options.Add(UploadOptions.ArchivePath.Instance);
         Options.Add(UploadOptions.BatchSize.Instance);
         Options.Add(UploadOptions.RateLimitConfig.Instance);
@@ -35,6 +42,7 @@ public class UploadOptionsValues
             InputPath = result.GetValue(UploadOptions.InputPath.Instance)!,
             Databases = result.GetValue(UploadOptions.Database.Instance),
             Signals = result.GetValue(UploadOptions.Signals.Instance),
+            Archive = result.GetValue(UploadOptions.Archive.Instance),
             ArchivePath = result.GetValue(UploadOptions.ArchivePath.Instance),
             WatchInterval = result.GetValue(UploadOptions.WatchInterval.Instance),
             BatchSize = result.GetValue(UploadOptions.BatchSize.Instance),
@@ -47,7 +55,8 @@ public class UploadOptionsValues
     public DirectoryInfo InputPath { get; private set; } = null!;
     public FileInfo[]? Databases { get; private set; }
     public uint[]? Signals { get; private set; }
-    public FileInfo? ArchivePath { get; private set; }
+    public ArchiveMode? Archive { get; private set; }
+    public DirectoryInfo? ArchivePath { get; private set; }
     public int? WatchInterval { get; private set; }
     public int BatchSize { get; private set; } = 5000;
     public FileInfo? RateLimitConfig { get; private set; }
@@ -150,14 +159,25 @@ public static class UploadOptions
         }
     }
 
-    public sealed class ArchivePath : Option<FileInfo?>
+    public sealed class Archive : Option<ArchiveMode?>
+    {
+        public static Archive Instance { get; } = new();
+
+        private Archive() : base("--archive")
+        {
+            Description = "Archive mode: 'dir' moves files to date directories, 'tar' compresses into daily .tar.zst archives";
+            HelpName = "MODE";
+        }
+    }
+
+    public sealed class ArchivePath : Option<DirectoryInfo?>
     {
         public static ArchivePath Instance { get; } = new();
 
-        private ArchivePath() : base("--archive")
+        private ArchivePath() : base("--archive-path")
         {
-            Description = "Move successfully processed log files to this archive file after upload";
-            HelpName = "FILE";
+            Description = "Directory for archived files. Defaults to input directory if not specified";
+            HelpName = "DIR";
         }
     }
 

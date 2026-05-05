@@ -17,7 +17,6 @@ public class UploadCommandHandler(
         var uploadOptions = UploadOptionsValues.Parse(parseResult);
 
         var inputPath = parseResult.GetValue(UploadOptions.InputPath.Instance);
-        var archiveDirectory = parseResult.GetValue(UploadOptions.ArchivePath.Instance);
 
         var watchInterval = parseResult.GetValue(UploadOptions.WatchInterval.Instance);
 
@@ -52,9 +51,9 @@ public class UploadCommandHandler(
 
                         var results = await pipeline.ProcessFilesAsync(files, cancellationToken);
 
-                        if (archiveDirectory != null)
+                        if (uploadOptions.Archive != null)
                         {
-                            ArchiveFiles(results, archiveDirectory);
+                            ArchiveFiles(results, uploadOptions.Archive.Value, uploadOptions.ArchivePath ?? inputDir);
                         }
                     }
                     catch (Exception ex)
@@ -103,14 +102,17 @@ public class UploadCommandHandler(
         };
     }
 
-    private void ArchiveFiles(List<FileProcessingResult> results, FileInfo archiveDirectory)
+    private void ArchiveFiles(List<FileProcessingResult> results, ArchiveMode mode, DirectoryInfo archiveDirectory)
     {
         var timestampCounts = new Dictionary<string, int>();
+        var dateFiles = new Dictionary<string, List<string>>();
 
         foreach (var result in results)
         {
             var timestamp = result.FirstTimestamp ?? result.File.CreationTime;
-            var timestampKey = timestamp.ToLocalTime().ToString("yyyy-MM-ddTHH-mm-ss");
+            var localTimestamp = timestamp.ToLocalTime();
+            var timestampKey = localTimestamp.ToString("yyyy-MM-ddTHH-mm-ss");
+            var dateKey = localTimestamp.ToString("yyyy-MM-dd");
 
             if (!timestampCounts.TryGetValue(timestampKey, out int increment))
             {
@@ -124,7 +126,9 @@ public class UploadCommandHandler(
             }
 
             var archiveFileName = $"{timestampKey}_{increment}.log";
-            var archivePath = Path.Combine(archiveDirectory.FullName, archiveFileName);
+            var dateDir = Path.Combine(archiveDirectory.FullName, dateKey);
+            Directory.CreateDirectory(dateDir);
+            var archivePath = Path.Combine(dateDir, archiveFileName);
 
             try
             {
@@ -133,9 +137,32 @@ public class UploadCommandHandler(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to archive file {FileName} to {ArchivePath}", result.File.Name, archivePath);
+                continue;
             }
 
+            if (!dateFiles.ContainsKey(dateKey))
+                dateFiles[dateKey] = new List<string>();
+            dateFiles[dateKey].Add(archivePath);
+
             timestampCounts[timestampKey] = increment + 1;
+        }
+
+        if (mode == ArchiveMode.Tar)
+        {
+            CompressDateDirectories(dateFiles, archiveDirectory);
+        }
+    }
+
+    private void CompressDateDirectories(Dictionary<string, List<string>> dateFiles, DirectoryInfo archiveDirectory)
+    {
+        foreach (var (dateKey, _) in dateFiles)
+        {
+            var dateDirPath = Path.Combine(archiveDirectory.FullName, dateKey);
+
+            if (!Directory.Exists(dateDirPath))
+                continue;
+
+            ArchiveCompressor.CompressDateDirectory(dateKey, dateDirPath, archiveDirectory.FullName, logger);
         }
     }
 }
