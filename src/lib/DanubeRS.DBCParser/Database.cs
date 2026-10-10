@@ -125,8 +125,18 @@ public class Database(ILogger<Database> logger)
     public void AddFile(TextReader reader)
     {
         var dbcString = reader.ReadToEnd();
-        var tokens = DbcTokenizer.Instance.Tokenize(dbcString);
-        var parsed = DbcParser.Database(tokens);
+        var tokens = DbcTokenizer.Instance.TryTokenize(dbcString);
+        if (!tokens.HasValue)
+        {
+            var position = tokens.ErrorPosition.Absolute;
+            var contextStart = Math.Max(0, position - 40);
+            var context = dbcString[contextStart..Math.Min(position + 60, dbcString.Length)]
+                .Replace("\r", "").Replace("\n", "⏎");
+            throw new FormatException(
+                $"Failed to tokenize DBC file at position {position} (line {tokens.ErrorPosition.Line}, column {tokens.ErrorPosition.Column}): {tokens.FormatErrorMessageFragment()}. Context: ...{context}...");
+        }
+
+        var parsed = DbcParser.Database(tokens.Value);
         if (!parsed.HasValue)
         {
             var position = parsed.ErrorPosition.Absolute;

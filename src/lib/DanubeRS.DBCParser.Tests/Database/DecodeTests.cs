@@ -807,4 +807,19 @@ SG_MUL_VAL_ 100 Be Be 1 [0|1];
         defn.Signals[0].Bounds.FitsIn(8).Should().BeTrue();  // 1-byte frame fits
     }
 
+
+    // Regression: tokenization failures surface as positioned FormatException, not raw ParseException.
+    [Fact]
+    public void TokenizeFailure_ThrowsWithPositionAndContext()
+    {
+        var database = new Database(new NullLogger<Database>());
+        // '~' outside any string is not a matchable token.
+        const string dbc = "VERSION \"\"\n\nBS_:\n\nBU_: A\n\nBO_ 100 M: 8 A\n SG_ S : 0|8@1+ (1,0) [0|255] \"\"  A\n\n~~garbage~~\n";
+        var act = () => database.AddFile(new StringReader(dbc));
+        var ex = act.Should().Throw<FormatException>().Which;
+        ex.Message.Should().Contain("Failed to tokenize DBC file at position");
+        ex.Message.Should().Contain("Context:");
+        ex.Message.Should().NotContain("ParseException");
+    }
+
 }
