@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 using DanubeRS.CANServer.Lib;
 using DanubeRS.CANServer.Lib.BinaryLogs;
 using DanubeRS.CANServer.Lib.Connections;
-using DanubeRS.CanServerUtils.Lib;
+using DanubeRS.DBCParser;
 using DanubeRS.DBCParser;
 using DanubeRS.CANServer.Web;
 
@@ -152,13 +152,13 @@ app.MapPost("/api/dbc/messages/{frameId}/signals", async (uint frameId, SignalCr
 {
     try
     {
-        var signal = new DanubeRS.CanServerUtils.Lib.Parser.Signal(
+        var signal = new DanubeRS.DBCParser.Parser.Signal(
             create.Name,
             create.Multiplex,
             create.StartBit,
             create.Size,
-            create.Order ?? DanubeRS.CanServerUtils.Lib.Parser.Endianness.Little,
-            create.ValueType ?? DanubeRS.CanServerUtils.Lib.Parser.ValueType.Unsigned,
+            create.Order ?? DanubeRS.DBCParser.Parser.Endianness.Little,
+            create.ValueType ?? DanubeRS.DBCParser.Parser.ValueType.Unsigned,
             create.Factor ?? 1.0,
             create.Offset ?? 0.0,
             create.Min ?? 0.0,
@@ -202,7 +202,7 @@ app.MapPost("/api/dbc/messages", async (MessageCreate create, DbcEditService edi
 {
     try
     {
-        var header = new DanubeRS.CanServerUtils.Lib.Parser.MessageHeader(create.FrameId, create.Name, create.Size, create.Node ?? "Vector");
+        var header = new DanubeRS.DBCParser.Parser.MessageHeader(create.FrameId, create.Name, create.Size, create.Node ?? "Vector");
         var message = await editService.AddMessageAsync(header);
         return Results.Ok(new
         {
@@ -583,30 +583,30 @@ public record SignalUpdate(
     string? Name,
     int? StartBit,
     int? Size,
-    DanubeRS.CanServerUtils.Lib.Parser.Endianness? Order,
-    DanubeRS.CanServerUtils.Lib.Parser.ValueType? ValueType,
+    DanubeRS.DBCParser.Parser.Endianness? Order,
+    DanubeRS.DBCParser.Parser.ValueType? ValueType,
     double? Factor,
     double? Offset,
     double? Min,
     double? Max,
     string? Unit,
     string? Receiver,
-    DanubeRS.CanServerUtils.Lib.Parser.Multiplex? Multiplex,
+    DanubeRS.DBCParser.Parser.Multiplex? Multiplex,
     bool ClearMultiplex = false);
 
 public record SignalCreate(
     string Name,
     int StartBit,
     int Size,
-    DanubeRS.CanServerUtils.Lib.Parser.Endianness? Order,
-    DanubeRS.CanServerUtils.Lib.Parser.ValueType? ValueType,
+    DanubeRS.DBCParser.Parser.Endianness? Order,
+    DanubeRS.DBCParser.Parser.ValueType? ValueType,
     double? Factor,
     double? Offset,
     double? Min,
     double? Max,
     string? Unit,
     string? Receiver,
-    DanubeRS.CanServerUtils.Lib.Parser.Multiplex? Multiplex);
+    DanubeRS.DBCParser.Parser.Multiplex? Multiplex);
 
 public record MessageCreate(
     uint FrameId,
@@ -621,15 +621,15 @@ public record PreviewRequest(
 public record SignalOverride(
     int? StartBit,
     int? Size,
-    DanubeRS.CanServerUtils.Lib.Parser.Endianness? Order,
-    DanubeRS.CanServerUtils.Lib.Parser.ValueType? ValueType,
+    DanubeRS.DBCParser.Parser.Endianness? Order,
+    DanubeRS.DBCParser.Parser.ValueType? ValueType,
     double? Factor,
     double? Offset,
     double? Min,
     double? Max,
     string? Unit)
 {
-    public DanubeRS.CanServerUtils.Lib.Parser.Signal ApplyTo(DanubeRS.CanServerUtils.Lib.Parser.Signal existing)
+    public DanubeRS.DBCParser.Parser.Signal ApplyTo(DanubeRS.DBCParser.Parser.Signal existing)
     {
         return existing with
         {

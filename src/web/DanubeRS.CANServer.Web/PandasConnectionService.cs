@@ -3,7 +3,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using DanubeRS.CANServer.Lib.Connections;
-using DanubeRS.CanServerUtils.Lib;
+using DanubeRS.DBCParser;
 using DanubeRS.DBCParser;
 using Microsoft.Extensions.Logging;
 
@@ -158,8 +158,8 @@ public class PandasConnectionService
         }
 
         var success = defn.IsMultiplexed
-            ? CanServerUtils.Lib.Decoder.TryParseMultiplexedMessage(defn, frame.Data, out var value)
-            : CanServerUtils.Lib.Decoder.TryParseRegularMessage(defn, frame.Data, out value);
+            ? DBCParser.Decoder.TryParseMultiplexedMessage(defn, frame.Data, out var value)
+            : DBCParser.Decoder.TryParseRegularMessage(defn, frame.Data, out value);
 
         if (!success || value == null)
         {
