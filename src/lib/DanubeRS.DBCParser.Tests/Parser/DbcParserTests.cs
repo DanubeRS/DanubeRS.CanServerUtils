@@ -1,10 +1,10 @@
-using DanubeRS.CanServerUtils.Lib.Parser;
-using DanubeRS.CanServerUtils.Lib.Tokenizer;
+using DanubeRS.DBCParser.Parser;
+using DanubeRS.DBCParser.Tokenizer;
 using FluentAssertions;
 using Superpower;
-using ValueType = DanubeRS.CanServerUtils.Lib.Parser.ValueType;
+using ValueType = DanubeRS.DBCParser.Parser.ValueType;
 
-namespace DanubeRS.CanServerUtils.Tests.Parser;
+namespace DanubeRS.DBCParser.Tests.Parser;
 
 public class DbcParserTests
 {
@@ -212,8 +212,10 @@ BU_: Vector ESP ABS
         var defaults = ParseDbc(dbc).AttributeDefaults;
         defaults.Should().HaveCount(1);
         defaults[0].AttributeName.Should().Be("GenMsgCycleTime");
-        defaults[0].Value.Should().BeOfType<DoubleAttributeDefaultValue>()
-            .Which.Value.Should().Be(500.0);
+        // Integral text parses as IntegerAttributeDefaultValue (branch contract: int-vs-double
+        // discrimination by integral text; "500.0" text would stay Double).
+        defaults[0].Value.Should().BeOfType<IntegerAttributeDefaultValue>()
+            .Which.Value.Should().Be(500);
     }
 
      [Fact]
@@ -356,18 +358,22 @@ BO_ 536870912 ExtMsg: 8 Vector
     }
 
     [Fact]
-    public void EmptyInput_ParseFails()
+    public void EmptyInput_ParseSucceeds()
     {
+        // Order-independent grammar with all sections optional tolerates empty input; the result
+        // carries empty collections rather than failing (contract per review decision).
         var tokens = DbcTokenizer.Instance.Tokenize("");
-        DbcParser.Database.TryParse(tokens).HasValue.Should().BeFalse();
+        DbcParser.Database.TryParse(tokens).HasValue.Should().BeTrue();
     }
 
     [Fact]
-    public void MissingVersion_ParseFails()
+    public void MissingVersion_ParseSucceeds()
     {
+        // Sections are optional and order-independent (deliberate grammar contract; real DBCs drop
+        // sections). A file without VERSION parses and yields an empty version string.
         const string dbc = "NS_ :\n\nBS_:\n\nBU_:\n\n";
         var tokens = DbcTokenizer.Instance.Tokenize(dbc);
-        DbcParser.Database.TryParse(tokens).HasValue.Should().BeFalse();
+        DbcParser.Database.TryParse(tokens).HasValue.Should().BeTrue();
     }
 
     [Fact]

@@ -1,8 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
-using DanubeRS.CanServerUtils.Lib.Parser;
-using ValueType = DanubeRS.CanServerUtils.Lib.Parser.ValueType;
+using DanubeRS.DBCParser.Parser;
+using ValueType = DanubeRS.DBCParser.Parser.ValueType;
 
-namespace DanubeRS.CanServerUtils.Lib;
+namespace DanubeRS.DBCParser;
 
 public static class Decoder
 {
@@ -25,17 +25,24 @@ public static class Decoder
                 break;
         }
 
-        long rawValue;
+        ulong rawValue;
+        double value;
         if (signal.Signal.ValueType == ValueType.Unsigned)
-            rawValue = (long)BitConverter.ToUInt64(signalValueBytes);
+        {
+            // Unsigned: compute in floating point so the full 64-bit range (max 2^64-1) is
+            // preserved — casting through long would fold 2^64-1 into -1.
+            rawValue = BitConverter.ToUInt64(signalValueBytes);
+            value = signal.Signal.Offset + rawValue * signal.Signal.Factor;
+        }
         else
         {
             var valueAsInt64 = BitConverter.ToInt64(signalValueBytes);
             var shiftAmount = 64 - signal.Signal.Size;
-            rawValue = (valueAsInt64 << shiftAmount) >> shiftAmount;
+            var signedRaw = (valueAsInt64 << shiftAmount) >> shiftAmount;
+            value = signal.Signal.Offset + signedRaw * signal.Signal.Factor;
         }
 
-        return new SignalValue(signal.Signal.Name, signal.Signal.Offset + rawValue * signal.Signal.Factor);
+        return new SignalValue(signal.Signal.Name, value);
     }
 
     public static void ExtractBitsLittleEndian(ReadOnlySpan<byte> data, int startBit, int signalSize, Span<byte> outputBytes)
@@ -53,27 +60,46 @@ public static class Decoder
             outputBytes[i] = (byte)((value >> (i * 8)) & 0xFF);
     }
 
+    /// <summary>
+    /// Big-endian (Motorola, '@0') extraction per the DBC spec: startBit is the MSB position in
+    /// LSB0 numbering; subsequent bits descend toward the LSB of the same byte, then continue at
+    /// the MSB of the next byte (sawtooth sequence). Master's previous implementation read an
+    /// ascending linear range starting at startBit, which decodes real Motorola frames wrongly
+    /// (verified against production Model3CAN UnixTimeSeconds528, 7|32@0 on 65 53 F1 00 → 1 700 000 000).
+    /// </summary>
     public static void ExtractBitsBigEndian(ReadOnlySpan<byte> data, int startBit, int signalSize, Span<byte> outputBytes)
     {
-        ulong value = 0;
-        var bitCount = data.Length * 8;
-
-        for (int i = 0; i < signalSize && startBit + i < bitCount; i++)
+        var bitPos = startBit;
+        ulong raw = 0;
+        for (var i = 0; i < signalSize; i++)
         {
-            if (GetBit(data, startBit + i))
-                value |= (1UL << (signalSize - 1 - i));
+            if (GetBit(data, bitPos))
+                raw |= 1UL << (signalSize - 1 - i);
+
+            bitPos = bitPos % 8 == 0
+                ? bitPos + 15 // reached the LSB of this byte → jump to the MSB of the next
+                : bitPos - 1;
         }
 
-        for (int i = 0; i < Math.Min((signalSize + 7) / 8, outputBytes.Length); i++)
-            outputBytes[i] = (byte)((value >> (i * 8)) & 0xFF);
+        for (var i = 0; i < Math.Min((signalSize + 7) / 8, outputBytes.Length); i++)
+            outputBytes[i] = (byte)((raw >> (i * 8)) & 0xFF);
     }
 
     public static bool TryParseRegularMessage(Database.MessageDefinition defn, ReadOnlySpan<byte> data, [NotNullWhen(true)] out MessageValue? value)
     {
         value = null;
-        if (defn.Signals.Count == 0) return true;
-        var lastSignal = defn.Signals.OrderByDescending(s => s.Signal.StartBit).First();
-        if (lastSignal.Signal.StartBit + lastSignal.Signal.Size > data.Length * 8) return false;
+        if (defn.Signals.Length == 0)
+        {
+            // Known message without signals: succeed with an empty value rather than
+            // returning true with a null value (violating the [NotNullWhen(true)] contract).
+            value = new MessageValue(defn.Header.Id, defn.Header.Name, [], null);
+            return true;
+        }
+
+        foreach (var sd in defn.Signals)
+        {
+            if (!sd.Bounds.FitsIn(data.Length * 8)) return false;
+        }
 
         var signals = new SignalValue[defn.SignalsByStartBit.Length];
         for (int i = 0; i < defn.SignalsByStartBit.Length; i++)
@@ -124,10 +150,10 @@ public static class Decoder
         if (filteredSignals.Length == 0)
             return false;
 
-        var lastSignal = filteredSignals.OrderByDescending(s => s.Signal.StartBit).FirstOrDefault();
-        if (lastSignal == null) return false;
-
-        if (lastSignal.Signal.StartBit + lastSignal.Signal.Size > data.Length * 8) return false;
+        foreach (var sd in filteredSignals)
+        {
+            if (!sd.Bounds.FitsIn(data.Length * 8)) return false;
+        }
 
         var signalValues = new SignalValue[filteredSignals.Length];
         for (int i = 0; i < filteredSignals.Length; i++)

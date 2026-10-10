@@ -1,10 +1,10 @@
-using DanubeRS.CanServerUtils.Lib;
-using DanubeRS.CanServerUtils.Lib.Parser;
-using DanubeRS.CanServerUtils.Lib.Tokenizer;
+using DanubeRS.DBCParser;
+using DanubeRS.DBCParser.Parser;
+using DanubeRS.DBCParser.Tokenizer;
 using FluentAssertions;
-using LibDatabase = DanubeRS.CanServerUtils.Lib.Database;
+using LibDatabase = DanubeRS.DBCParser.Database;
 
-namespace DanubeRS.CanServerUtils.Tests.Database;
+namespace DanubeRS.DBCParser.Tests;
 
 public class DbcSerializerTests
 {
@@ -181,7 +181,7 @@ public class DbcSerializerTests
     private static ParsedDb Parse(string dbcContent)
     {
         var tokens = DbcTokenizer.Instance.Tokenize(dbcContent);
-        var result = DanubeRS.CanServerUtils.Lib.Parser.DbcParser.Database(tokens);
+        var result = DanubeRS.DBCParser.Parser.DbcParser.Database(tokens);
         if (!result.HasValue)
             throw new Exception($"Parse failed: {result.ErrorMessage ?? string.Join(", ", result.Expectations ?? [])}");
         return result.Value;

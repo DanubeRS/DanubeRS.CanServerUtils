@@ -1,10 +1,10 @@
 using System.Text;
-using DanubeRS.CanServerUtils.Lib.Parser;
-using DanubeRS.CanServerUtils.Lib.Tokenizer;
+using DanubeRS.DBCParser.Parser;
+using DanubeRS.DBCParser.Tokenizer;
 using DanubeRS.DBCParser;
 using Microsoft.Extensions.Logging;
 
-namespace DanubeRS.CanServerUtils.Lib;
+namespace DanubeRS.DBCParser;
 
 public class DbcEditService
 {

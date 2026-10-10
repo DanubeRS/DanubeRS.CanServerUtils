@@ -3,7 +3,7 @@ using Superpower.Model;
 using Superpower.Parsers;
 using Superpower.Tokenizers;
 
-namespace DanubeRS.CanServerUtils.Lib.Tokenizer;
+namespace DanubeRS.DBCParser.Tokenizer;
 
 public static class DbcTokenizer
 {
@@ -15,7 +15,9 @@ public static class DbcTokenizer
         from close in Character.EqualTo('"')
         select Unit.Value;
 
-    public static Tokenizer<DbcTokens> Instance =>
+    public static readonly Tokenizer<DbcTokens> Instance = Build();
+
+    private static Tokenizer<DbcTokens> Build() =>
         new TokenizerBuilder<DbcTokens>()
             .Match(Span.Regex(@"(\r?\n){2,}"), DbcTokens.DefinitionEnd)
             .Match(Span.Regex(@"[-+]?[0-9]+(?:\.[0-9]+)?[eE][-+]?[0-9]+"), DbcTokens.Sci)

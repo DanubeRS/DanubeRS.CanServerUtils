@@ -1,8 +1,8 @@
-using DanubeRS.CanServerUtils.Lib;
+using DanubeRS.DBCParser;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace DanubeRS.CanServerUtils.Tests.Database;
+namespace DanubeRS.DBCParser.Tests;
 
 public class MessageDefinitionTests
 {
@@ -28,9 +28,9 @@ BO_ 2 RegularMsg: 8 Vector
 
 ";
 
-    private static Lib.Database CreateDb()
+    private static Database CreateDb()
     {
-        var db = new Lib.Database(new NullLogger<Lib.Database>());
+        var db = new Database(new NullLogger<Database>());
         db.AddFile(new StringReader(MultiplexedDbc));
         return db;
     }
@@ -97,7 +97,7 @@ BO_ 1 Msg: 8 Vector
 VAL_ 1 Status 0 ""Off"" 1 ""On"" 2 ""Fault"";
 
 ";
-        var db = new Lib.Database(new NullLogger<Lib.Database>());
+        var db = new Database(new NullLogger<Database>());
         db.AddFile(new StringReader(dbc));
         db.TryParseBinaryMessage(1, new byte[8], out _, out var defn).Should().BeTrue();
         var statusDef = defn!.Signals.First(s => s.Signal.Name == "Status");
@@ -121,7 +121,7 @@ BO_ 1 Msg: 8 Vector
  SG_ Speed : 0|8@1+ (1,0) [0|255] """" Vector
 
 ";
-        var db = new Lib.Database(new NullLogger<Lib.Database>());
+        var db = new Database(new NullLogger<Database>());
         db.AddFile(new StringReader(dbc));
         db.TryParseBinaryMessage(1, new byte[8], out _, out var defn).Should().BeTrue();
         var speedDef = defn!.Signals.First(s => s.Signal.Name == "Speed");

@@ -1,9 +1,9 @@
-using DanubeRS.CanServerUtils.Lib.Tokenizer;
+using DanubeRS.DBCParser.Tokenizer;
 using FluentAssertions;
 using Superpower;
 using Superpower.Model;
 
-namespace DanubeRS.CanServerUtils.Tests.Tokenizer;
+namespace DanubeRS.DBCParser.Tests.Tokenizer;
 
 public class DbcTokenizerTests
 {

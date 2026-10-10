@@ -7,7 +7,7 @@
 
         <IsPackable>false</IsPackable>
         <IsTestProject>true</IsTestProject>
-        <RootNamespace>DanubeRS.CanServerUtils.Tests</RootNamespace>
+        <RootNamespace>DanubeRS.DBCParser.Tests</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>

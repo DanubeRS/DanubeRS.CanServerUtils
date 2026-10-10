@@ -1,9 +1,9 @@
 using System.Globalization;
 using System.Text;
-using DanubeRS.CanServerUtils.Lib.Parser;
-using DbcValueType = DanubeRS.CanServerUtils.Lib.Parser.ValueType;
+using DanubeRS.DBCParser.Parser;
+using DbcValueType = DanubeRS.DBCParser.Parser.ValueType;
 
-namespace DanubeRS.CanServerUtils.Lib;
+namespace DanubeRS.DBCParser;
 
 public static class DbcSerializer
 {

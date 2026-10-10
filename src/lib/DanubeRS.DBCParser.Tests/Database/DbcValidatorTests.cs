@@ -1,10 +1,10 @@
-using DanubeRS.CanServerUtils.Lib;
-using DanubeRS.CanServerUtils.Lib.Parser;
+using DanubeRS.DBCParser;
+using DanubeRS.DBCParser.Parser;
 using FluentAssertions;
-using DbcValueType = DanubeRS.CanServerUtils.Lib.Parser.ValueType;
-using DbcVersion = DanubeRS.CanServerUtils.Lib.Parser.Version;
+using DbcValueType = DanubeRS.DBCParser.Parser.ValueType;
+using DbcVersion = DanubeRS.DBCParser.Parser.Version;
 
-namespace DanubeRS.CanServerUtils.Tests.Database;
+namespace DanubeRS.DBCParser.Tests;
 
 public class DbcValidatorTests
 {
@@ -28,10 +28,12 @@ public class DbcValidatorTests
         new(new MessageHeader(id, name, size, node), signals ?? [CreateSignal()]);
 
     private static ParsedDb CreateParsedDb(Message[]? messages = null) =>
-        new(new DbcVersion(""),
+        new(new DBCParser.Parser.Version(""),
             new NewSymbols([]),
             new Nodes([]),
             messages ?? [CreateMessage()],
+            [],
+            [],
             [],
             [],
             [],

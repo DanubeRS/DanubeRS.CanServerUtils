@@ -1,8 +1,8 @@
-using DanubeRS.CanServerUtils.Lib;
+using DanubeRS.DBCParser;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace DanubeRS.CanServerUtils.Tests.Database;
+namespace DanubeRS.DBCParser.Tests;
 
 public class EndianDecodeTests
 {
@@ -19,10 +19,10 @@ BS_:
 BU_: Vector
 
 BO_ 1 Msg: 8 Vector
- SG_ Sig : 0|8@0+ (1,0) [0|255] """" Vector
+ SG_ Sig : 7|8@0+ (1,0) [0|255] """" Vector
 
 ";
-        var db = new Lib.Database(new NullLogger<Lib.Database>());
+        var db = new Database(new NullLogger<Database>());
         db.AddFile(new StringReader(dbc));
 
         // DBC sawtooth: frame bit 0=signal MSB, bits counted LSB-to-MSB within each byte  
@@ -31,7 +31,7 @@ BO_ 1 Msg: 8 Vector
         var data = new byte[] { 0x55, 0, 0, 0, 0, 0, 0, 0 };
 
         db.TryParseBinaryMessage(1, data, out var value, out _).Should().BeTrue();
-        value!.Signals.Single().Value.Should().Be(0xAA); // Sawtooth bit counting
+        value!.Signals.Single().Value.Should().Be(0x55); // Spec sawtooth: start 7 = MSB; byte value unchanged
     }
 
     [Fact]
@@ -47,18 +47,18 @@ BS_:
 BU_: Vector
 
 BO_ 1 Msg: 8 Vector
- SG_ Sig : 0|16@0+ (1,0) [0|65535] """" Vector
+ SG_ Sig : 7|16@0+ (1,0) [0|65535] """" Vector
 
 ";
-        var db = new Lib.Database(new NullLogger<Lib.Database>());
+        var db = new Database(new NullLogger<Database>());
         db.AddFile(new StringReader(dbc));
 
-        // DBC sawtooth: frame bits read sequentially, first=signal MSB
-        // data=[0x12][0x34] with BitArray LSB-first indexing produces signal value 0x482C
+        // Spec sawtooth: start bit 7 is the signal MSB; bits descend 7..0 then continue at 15..8.
+        // data=[0x12][0x34] therefore decodes as 0x1234.
         var data = new byte[] { 0x12, 0x34, 0, 0, 0, 0, 0, 0 };
 
         db.TryParseBinaryMessage(1, data, out var value, out _).Should().BeTrue();
-        value!.Signals.Single().Value.Should().Be(0x482C); // Sawtooth bit counting result
+        value!.Signals.Single().Value.Should().Be(0x1234); // Spec sawtooth result
     }
 
     [Fact]
@@ -74,19 +74,18 @@ BS_:
 BU_: Vector
 
 BO_ 1 Msg: 8 Vector
- SG_ Sig : 4|16@0+ (1,0) [0|65535] """" Vector
+ SG_ Sig : 15|16@0+ (1,0) [0|65535] """" Vector
 
 ";
-        var db = new Lib.Database(new NullLogger<Lib.Database>());
+        var db = new Database(new NullLogger<Database>());
         db.AddFile(new StringReader(dbc));
 
-        // Big-endian signal starting at bit 4 (MSB position):
-        // Signal bits map to frame positions 4-19
-        // For value 0x1234, data bytes must have specific bits set
+        // Big-endian signal starting at bit 15 (MSB of byte 1): bits descend 15..8 then 23..16.
+        // data=[0x80][0xC4][0x02] decodes as 0xC402.
         var data = new byte[] { 0x80, 0xC4, 0x02, 0, 0, 0, 0, 0 };
 
         db.TryParseBinaryMessage(1, data, out var value, out _).Should().BeTrue();
-        value!.Signals.Single().Value.Should().Be(0x1234); 
+        value!.Signals.Single().Value.Should().Be(0xC402);
     }
 
     [Fact]
@@ -115,13 +114,13 @@ BS_:
 BU_: Vector
 
 BO_ 1 Msg: 8 Vector
- SG_ Sig : 0|16@0+ (1,0) [0|65535] """" Vector
+ SG_ Sig : 7|16@0+ (1,0) [0|65535] """" Vector
 
 ";
-        var leDb = new Lib.Database(new NullLogger<Lib.Database>());
+        var leDb = new Database(new NullLogger<Database>());
         leDb.AddFile(new StringReader(littleEndianDbc));
 
-        var beDb = new Lib.Database(new NullLogger<Lib.Database>());
+        var beDb = new Database(new NullLogger<Database>());
         beDb.AddFile(new StringReader(bigEndianDbc));
 
         // Data: [0x12][0x34]
@@ -132,8 +131,8 @@ BO_ 1 Msg: 8 Vector
 
         // Little-endian @1+: first extracted bit is signal LSB = 0x3412 via sawtooth
         leValue!.Signals.Single().Value.Should().Be(0x3412);
-        // Big-endian @0+: first extracted bit is signal MSB = 0x482C via sawtooth  
-        beValue!.Signals.Single().Value.Should().Be(0x482C);
+        // Big-endian @0+ (start 7): spec sawtooth MSB-first = 0x1234
+        beValue!.Signals.Single().Value.Should().Be(0x1234);
 
         // THESE MUST BE DIFFERENT - if they're equal, endianness bug exists!
         leValue.Signals.Single().Value.Should().NotBe(beValue.Signals.Single().Value);
@@ -152,17 +151,17 @@ BS_:
 BU_: Vector
 
 BO_ 1 Msg: 8 Vector
- SG_ Sig : 0|32@0+ (1,0) [0|65535] """" Vector
+ SG_ Sig : 7|32@0+ (1,0) [0|65535] """" Vector
 
 ";
-        var db = new Lib.Database(new NullLogger<Lib.Database>());
+        var db = new Database(new NullLogger<Database>());
         db.AddFile(new StringReader(dbc));
 
-        // DBC sawtooth big-endian with data [0x12][0x34][0x56][0x78] produces 0x482C6A1E
+        // Spec sawtooth big-endian (start 7) with data [0x12][0x34][0x56][0x78] produces 0x12345678
         var data = new byte[] { 0x12, 0x34, 0x56, 0x78, 0, 0, 0, 0 };
 
         db.TryParseBinaryMessage(1, data, out var value, out _).Should().BeTrue();
-        value!.Signals.Single().Value.Should().Be(0x482C6A1E); // Sawtooth result
+        value!.Signals.Single().Value.Should().Be(0x12345678); // Spec sawtooth result
     }
 
     [Fact]
@@ -181,7 +180,7 @@ BO_ 1 Msg: 8 Vector
  SG_ Sig : 0|16@0- (1,0) [0|65535] """" Vector
 
 ";
-        var db = new Lib.Database(new NullLogger<Lib.Database>());
+        var db = new Database(new NullLogger<Database>());
         db.AddFile(new StringReader(dbc));
 
         // Big-endian signed: need frame_bit[0]=1 to get signal MSB set, rest=0 for 0x8000

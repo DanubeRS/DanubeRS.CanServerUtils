@@ -1,4 +1,4 @@
-using DanubeRS.CanServerUtils.Lib;
+using DanubeRS.DBCParser;
 using DanubeRS.CANServer.Lib.BinaryLogs;
 using DanubeRS.CANServer.Lib.Downloader;
 using DanubeRS.CANServer.Lib.Downloader.Client;
@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace DanubeRS.CANServer.CLI.Configuration;
 
-public delegate Task<DanubeRS.CanServerUtils.Lib.Database> DatabaseFactory(FileInfo[] files);
+public delegate Task<DanubeRS.DBCParser.Database> DatabaseFactory(FileInfo[] files);
 public delegate Task<DanubeRS.CANServer.Lib.BinaryLogs.Reader?> ReaderFactory(Stream stream);
 
 public static class ServiceCollectionExtensions

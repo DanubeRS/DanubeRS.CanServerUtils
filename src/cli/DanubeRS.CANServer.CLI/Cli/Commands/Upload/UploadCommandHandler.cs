@@ -2,6 +2,7 @@ using System.CommandLine;
 using DanubeRS.CANServer.CLI.Commands.Upload.RateLimiting;
 using DanubeRS.CANServer.CLI.Configuration;
 using InfluxDB.Client;
+using InfluxDB.Client;
 using InfluxDB.Client.Writes;
 using Microsoft.Extensions.Logging;
 

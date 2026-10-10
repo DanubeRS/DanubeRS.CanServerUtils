@@ -4,7 +4,7 @@ using System.Globalization;
 using System.Net.Sockets;
 using System.Text;
 using DanubeRS.CANServer.Lib.Pandas;
-using DanubeRS.CanServerUtils.Lib;
+using DanubeRS.DBCParser;
 using Microsoft.Extensions.Logging;
 
 var loggerFactory = LoggerFactory.Create(b =>
@@ -51,7 +51,7 @@ void HandleMessages(PandasMessage message)
             {
                 var value = messageValue.Signals.Single(s => s.SignalName == signal.Signal.Name).Value;
                 var signalValueName =
-                    signal.ValueLookup?.GetValueOrDefault((uint)value) ?? value.ToString(CultureInfo.InvariantCulture);
+                    signal.ValueLookup?.GetValueOrDefault((long)value) ?? value.ToString(CultureInfo.InvariantCulture);
                 logger.LogInformation("{Name} - {Value}", signal.Signal.Name, signalValueName);
             }
         }

@@ -1,8 +1,8 @@
-using DanubeRS.CanServerUtils.Lib;
+using DanubeRS.DBCParser;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace DanubeRS.CanServerUtils.Tests.Database;
+namespace DanubeRS.DBCParser.Tests;
 
 public class ExtendedIdDecodeTests
 {
@@ -22,7 +22,7 @@ BO_ 536870912 ExtMsg: 8 Vector
  SG_ Data : 0|8@1+ (1,0) [0|255] """" Vector
 
 ";
-        var db = new Lib.Database(new NullLogger<Lib.Database>());
+        var db = new Database(new NullLogger<Database>());
         db.AddFile(new StringReader(dbc));
 
         // Extended CAN ID: 0x20000000
@@ -48,7 +48,7 @@ BO_ 4294967295 MaxExtMsg: 8 Vector
  SG_ Data : 0|8@1+ (1,0) [0|255] """" Vector
 
 ";
-        var db = new Lib.Database(new NullLogger<Lib.Database>());
+        var db = new Database(new NullLogger<Database>());
         db.AddFile(new StringReader(dbc));
 
         db.TryParseBinaryMessage(4294967295u, new byte[] { 0x12, 0, 0, 0, 0, 0, 0, 0 }, 

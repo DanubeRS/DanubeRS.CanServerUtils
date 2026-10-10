@@ -1,7 +1,7 @@
 using DanubeRS.DBCParser;
 using FluentAssertions;
 
-namespace DanubeRS.CanServerUtils.Tests;
+namespace DanubeRS.DBCParser.Tests;
 
 public class DbcParseExceptionTests
 {
@@ -9,7 +9,8 @@ public class DbcParseExceptionTests
     public void SingleError_MessageContainsCount()
     {
         var ex = new DbcParseException(["error1"]);
-        ex.Message.Should().Contain("1 parse error(s)");
+        // Single errors surface the positioned message verbatim (not a count wrapper).
+        ex.Message.Should().Be("error1");
         ex.Errors.Should().HaveCount(1);
     }
 

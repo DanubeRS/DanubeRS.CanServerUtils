@@ -1,8 +1,8 @@
-using DanubeRS.CanServerUtils.Lib;
+using DanubeRS.DBCParser;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace DanubeRS.CanServerUtils.Tests.Database;
+namespace DanubeRS.DBCParser.Tests;
 
 public class MultiplexedDecodeTests
 {
@@ -24,9 +24,9 @@ BO_ 1 MuxMsg: 8 Vector
 
 ";
 
-    private static Lib.Database CreateDb()
+    private static Database CreateDb()
     {
-        var db = new Lib.Database(new NullLogger<Lib.Database>());
+        var db = new Database(new NullLogger<Database>());
         db.AddFile(new StringReader(MultiplexedDbc));
         return db;
     }
@@ -105,7 +105,7 @@ BO_ 1 RegularMsg: 8 Vector
  SG_ Sig : 0|8@1+ (1,0) [0|255] """" Vector
 
 ";
-        var db = new Lib.Database(new NullLogger<Lib.Database>());
+        var db = new Database(new NullLogger<Database>());
         db.AddFile(new StringReader(dbc));
         db.TryParseBinaryMessage(1, new byte[8], out var value, out _).Should().BeTrue();
         value!.MultiplexValue.Should().BeNull();
@@ -137,7 +137,7 @@ BO_ 1 MuxMsg: 8 Vector
  SG_ SigA m1 : 8|16@1+ (1,0) [0|65535] """" Vector
 
 ";
-        var db = new Lib.Database(new NullLogger<Lib.Database>());
+        var db = new Database(new NullLogger<Database>());
         db.AddFile(new StringReader(dbc));
 
         db.TryParseBinaryMessage(1, new byte[8], out _, out var defn).Should().BeTrue();
@@ -162,7 +162,7 @@ BO_ 1 MuxMsg: 8 Vector
  SG_ SigA_m100 m100 : 16|8@1+ (1,0) [0|255] """" Vector
 
 ";
-        var db = new Lib.Database(new NullLogger<Lib.Database>());
+        var db = new Database(new NullLogger<Database>());
         db.AddFile(new StringReader(dbc));
 
         // Mux value = 100 (0x0064), little-endian stored as [0x64][0x00]
@@ -191,7 +191,7 @@ BO_ 1 MuxMsg: 8 Vector
  SG_ OnlyWhenM1 m1 : 8|8@1+ (1,0) [0|255] """" Vector
 
 ";
-        var db = new Lib.Database(new NullLogger<Lib.Database>());
+        var db = new Database(new NullLogger<Database>());
         db.AddFile(new StringReader(dbc));
 
         var data = new byte[] { 0x01, 0xAB, 0, 0, 0, 0, 0, 0xCD };

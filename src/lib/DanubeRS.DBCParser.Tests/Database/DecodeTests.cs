@@ -1,9 +1,9 @@
-using DanubeRS.CanServerUtils.Lib;
+using DanubeRS.DBCParser;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using ValueType = DanubeRS.CanServerUtils.Lib.Parser.ValueType;
+using ValueType = DanubeRS.DBCParser.Parser.ValueType;
 
-namespace DanubeRS.CanServerUtils.Tests.Database;
+namespace DanubeRS.DBCParser.Tests;
 
 public class DecodeTests
 {
@@ -25,9 +25,9 @@ public class DecodeTests
 
         """;
 
-    private static Lib.Database CreateDb()
+    private static Database CreateDb()
     {
-        var db = new Lib.Database(new NullLogger<Lib.Database>());
+        var db = new Database(new NullLogger<Database>());
         db.AddFile(new StringReader(TestDbc));
         return db;
     }
@@ -147,7 +147,7 @@ public class DecodeTests
 
 
             """;
-        var db = new Lib.Database(new NullLogger<Lib.Database>());
+        var db = new Database(new NullLogger<Database>());
         db.AddFile(new StringReader(dbc));
         db.TryParseBinaryMessage(1, new byte[8], out _, out var defn).Should().BeTrue();
         var statusDef = defn!.Signals.First(s => s.Signal.Name == "Status");

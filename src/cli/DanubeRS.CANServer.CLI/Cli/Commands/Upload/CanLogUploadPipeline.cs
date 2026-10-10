@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks.Dataflow;
-using DanubeRS.CanServerUtils.Lib;
+using DanubeRS.DBCParser;
 using DanubeRS.CANServer.CLI.Commands.Upload.RateLimiting;
 using DanubeRS.CANServer.Lib.BinaryLogs;
 using InfluxDB.Client;

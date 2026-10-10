@@ -1,7 +1,7 @@
 using System.Linq;
-using DanubeRS.CanServerUtils.Lib.Parser;
+using DanubeRS.DBCParser.Parser;
 
-namespace DanubeRS.CanServerUtils.Lib;
+namespace DanubeRS.DBCParser;
 
 public class ValidationResult
 {

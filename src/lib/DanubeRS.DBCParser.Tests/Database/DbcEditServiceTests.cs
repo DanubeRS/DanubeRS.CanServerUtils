@@ -1,11 +1,11 @@
-using DanubeRS.CanServerUtils.Lib;
-using DanubeRS.CanServerUtils.Lib.Parser;
+using DanubeRS.DBCParser;
+using DanubeRS.DBCParser.Parser;
 using DanubeRS.DBCParser;
 using FluentAssertions;
-using LibDatabase = DanubeRS.CanServerUtils.Lib.Database;
-using DbcValueType = DanubeRS.CanServerUtils.Lib.Parser.ValueType;
+using LibDatabase = DanubeRS.DBCParser.Database;
+using DbcValueType = DanubeRS.DBCParser.Parser.ValueType;
 
-namespace DanubeRS.CanServerUtils.Tests.Database;
+namespace DanubeRS.DBCParser.Tests;
 
 public class DbcEditServiceTests
 {
@@ -86,7 +86,7 @@ public class DbcEditServiceTests
         var defn = await service.GetMessageDefinitionAsync(1);
         defn.Should().NotBeNull();
         defn!.Header.Id.Should().Be(1u);
-        defn.Signals.Count.Should().Be(4);
+        defn.Signals.Length.Should().Be(4);
     }
 
     [Fact]

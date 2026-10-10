@@ -1,20 +1,20 @@
-using DanubeRS.CanServerUtils.Lib;
+using DanubeRS.DBCParser;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace DanubeRS.CanServerUtils.Tests.Database;
+namespace DanubeRS.DBCParser.Tests;
 
 public class SignExtensionTests
 {
-    private static Lib.Database CreateDbWithSignedSignal(int startBit, int size, double factor = 1, double offset = 0)
+    private static Database CreateDbWithSignedSignal(int startBit, int size, double factor = 1, double offset = 0)
     {
         var dbc = $"VERSION \"\"\n\nNS_ :\n\nBS_:\n\nBU_: Vector\n\nBO_ 1 TestMsg: 8 Vector\n SG_ SignedSignal : {startBit}|{size}@1- ({factor},{offset}) [0|0] \"\" Vector\n\n";
-        var db = new Lib.Database(new NullLogger<Lib.Database>());
+        var db = new Database(new NullLogger<Database>());
         db.AddFile(new StringReader(dbc));
         return db;
     }
 
-    private static double DecodeSignedValue(Lib.Database db, byte[] data)
+    private static double DecodeSignedValue(Database db, byte[] data)
     {
         db.TryParseBinaryMessage(1, data, out var value, out _).Should().BeTrue();
         return value!.Signals.First(s => s.SignalName == "SignedSignal").Value;
