@@ -1,6 +1,6 @@
 using Superpower.Display;
 
-namespace DanubeRS.CanServerUtils.Lib.Tokenizer;
+namespace DanubeRS.DBCParser.Tokenizer;
 
 public enum DbcTokens
 {

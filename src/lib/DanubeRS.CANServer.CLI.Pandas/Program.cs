@@ -4,7 +4,7 @@ using System.Globalization;
 using System.Net.Sockets;
 using System.Text;
 using DanubeRS.CANServer.Lib.Pandas;
-using DanubeRS.CanServerUtils.Lib;
+using DanubeRS.DBCParser;
 using Microsoft.Extensions.Logging;
 
 var loggerFactory = LoggerFactory.Create(b =>

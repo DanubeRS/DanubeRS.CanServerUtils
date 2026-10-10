@@ -1,9 +1,10 @@
 using System.Globalization;
-using DanubeRS.CanServerUtils.Lib.Parser;
+using DanubeRS.DBCParser.Parser;
+using DanubeRS.DBCParser;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace DanubeRS.CanServerUtils.Tests.Database;
+namespace DanubeRS.DBCParser.Tests.Decoding;
 
 public class DecodeTests
 {
@@ -31,7 +32,7 @@ BO_ 1 Status: 8 Node1
     [Fact]
     public void ValidPacketData_Parsed_ValidOutputData()
     {
-        var database = new Lib.Database(new NullLogger<Lib.Database>());
+        var database = new Database(new NullLogger<Database>());
         database.AddFile(new StringReader(MinimalDbc));
 
         var frameData = new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };
@@ -54,7 +55,7 @@ BO_ 1 Status: 8 Node1
     [Fact]
     public void StringValues_Parsed_QuotesStripped()
     {
-        var database = new Lib.Database(new NullLogger<Lib.Database>());
+        var database = new Database(new NullLogger<Database>());
         const string dbc = """
 VERSION "1.0"
 
@@ -91,7 +92,7 @@ VAL_ 100 S 1 "One" 2 "Two";
     [Fact]
     public void EscapedQuotes_Unescaped()
     {
-        var database = new Lib.Database(new NullLogger<Lib.Database>());
+        var database = new Database(new NullLogger<Database>());
         const string dbc = """
 VERSION "1.0"
 
@@ -120,7 +121,7 @@ CM_ BO_ 100 "has \"escaped\" quotes";
     [Fact]
     public void CommaSeparatedReceivers_Parsed()
     {
-        var database = new Lib.Database(new NullLogger<Lib.Database>());
+        var database = new Database(new NullLogger<Database>());
         var dbc = MinimalDbc.Replace(
             "SG_ A : 0|8@1+ (1,0) [0|255] \"km/h\"  Node1",
             "SG_ A : 0|8@1+ (1,0) [0|255] \"km/h\"  Node1,Node2");
@@ -132,7 +133,7 @@ CM_ BO_ 100 "has \"escaped\" quotes";
     [Fact]
     public void AttributesAndComments_Retained()
     {
-        var database = new Lib.Database(new NullLogger<Lib.Database>());
+        var database = new Database(new NullLogger<Database>());
         const string dbc = """
 VERSION "5.0"
 
@@ -170,7 +171,7 @@ BA_ "CycleTime" BO_ 100 100;
     [Fact]
     public void FloatAttributeDefinition_Parsed()
     {
-        var database = new Lib.Database(new NullLogger<Lib.Database>());
+        var database = new Database(new NullLogger<Database>());
         const string dbc = """
 VERSION ""
 
@@ -198,7 +199,7 @@ BA_DEF_ SG_  "Slope" FLOAT 0 100;
     [Fact]
     public void NegativeValueDescriptionKeys_Wrapped()
     {
-        var database = new Lib.Database(new NullLogger<Lib.Database>());
+        var database = new Database(new NullLogger<Database>());
         const string dbc = """
 VERSION ""
 
@@ -230,7 +231,7 @@ VAL_ 100 S -1 "Unknown" 0 "Known";
     [Fact]
     public void DuplicateValueDescriptions_Merged()
     {
-        var database = new Lib.Database(new NullLogger<Lib.Database>());
+        var database = new Database(new NullLogger<Database>());
         const string dbc = """
 VERSION ""
 
@@ -259,7 +260,7 @@ VAL_ 100 S 2 "B";
     [Fact]
     public void EnvVariableValueDescriptions_Parsed()
     {
-        var database = new Lib.Database(new NullLogger<Lib.Database>());
+        var database = new Database(new NullLogger<Database>());
         const string dbc = """
 VERSION ""
 
@@ -288,7 +289,7 @@ VAL_ MyEnvVar 1 "On" 0 "Off";
     [Fact]
     public void ZeroSignalMessage_Decodes_EmptyNonNull()
     {
-        var database = new Lib.Database(new NullLogger<Lib.Database>());
+        var database = new Database(new NullLogger<Database>());
         const string dbc = """
 VERSION ""
 
@@ -314,7 +315,7 @@ BO_ 100 Empty: 8 A
     [Fact]
     public void MinGreaterThanMax_Rejected()
     {
-        var database = new Lib.Database(new NullLogger<Lib.Database>());
+        var database = new Database(new NullLogger<Database>());
         const string dbc = """
 VERSION ""
 
@@ -341,7 +342,7 @@ BA_DEF_ SG_  "Rng" INT 100 0;
     [Fact]
     public void IntAttributeWithDecimalBounds_CleanFailure()
     {
-        var database = new Lib.Database(new NullLogger<Lib.Database>());
+        var database = new Database(new NullLogger<Database>());
         const string dbc = """
 VERSION ""
 
@@ -368,7 +369,7 @@ BA_DEF_ SG_  "Weird" INT 0.0 100.0;
     [Fact]
     public void ParseFailure_ThrowsWithPositionAndContext()
     {
-        var database = new Lib.Database(new NullLogger<Lib.Database>());
+        var database = new Database(new NullLogger<Database>());
         const string dbc = "VERSION \"\"\n\nNS_ :\n\tCM_\n\nBS_:\n\nBO_ garbage\n";
         var act = () => database.AddFile(new StringReader(dbc));
         var ex = act.Should().Throw<FormatException>().Which;
@@ -387,7 +388,7 @@ BA_DEF_ SG_  "Weird" INT 0.0 100.0;
         CultureInfo.CurrentCulture = de;
         try
         {
-            var database = new Lib.Database(new NullLogger<Lib.Database>());
+            var database = new Database(new NullLogger<Database>());
             database.AddFile(new StringReader(MinimalDbc));
             database.TryParseBinaryMessage(1, new byte[] { 10, 5, 0, 0, 0, 0, 0, 0 }, out var value, out _)
                 .Should().BeTrue();
@@ -406,7 +407,7 @@ BA_DEF_ SG_  "Weird" INT 0.0 100.0;
     [Fact]
     public void Unsigned64Bit_RawDecodes_FullRange()
     {
-        var database = new Lib.Database(new NullLogger<Lib.Database>());
+        var database = new Database(new NullLogger<Database>());
         const string dbc = """
 VERSION ""
 

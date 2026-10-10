@@ -9,7 +9,7 @@ using Avalonia;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DanubeRS.CANServer.Lib.Pandas;
-using DanubeRS.CanServerUtils.Lib;
+using DanubeRS.DBCParser;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReactiveUI;
 

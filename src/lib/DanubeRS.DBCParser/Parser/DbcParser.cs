@@ -1,12 +1,12 @@
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Text.RegularExpressions;
-using DanubeRS.CanServerUtils.Lib.Tokenizer;
+using DanubeRS.DBCParser.Tokenizer;
 using Superpower;
 using Superpower.Model;
 using Superpower.Parsers;
 
-namespace DanubeRS.CanServerUtils.Lib.Parser;
+namespace DanubeRS.DBCParser.Parser;
 
 public static class DbcParser
 {

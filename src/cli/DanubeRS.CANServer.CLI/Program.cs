@@ -9,7 +9,7 @@ using DanubeRS.CANServer.CLI.Cli.Commands.Upload;
 using DanubeRS.CANServer.Lib.BinaryLogs;
 using DanubeRS.CANServer.Lib.Downloader;
 using DanubeRS.CANServer.Lib.Downloader.Client;
-using DanubeRS.CanServerUtils.Lib;
+using DanubeRS.DBCParser;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;

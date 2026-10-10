@@ -2,12 +2,12 @@ using System.Collections;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using DanubeRS.CanServerUtils.Lib.Parser;
-using DanubeRS.CanServerUtils.Lib.Tokenizer;
+using DanubeRS.DBCParser.Parser;
+using DanubeRS.DBCParser.Tokenizer;
 using Microsoft.Extensions.Logging;
-using ValueType = DanubeRS.CanServerUtils.Lib.Parser.ValueType;
+using ValueType = DanubeRS.DBCParser.Parser.ValueType;
 
-namespace DanubeRS.CanServerUtils.Lib;
+namespace DanubeRS.DBCParser;
 
 public class Database(ILogger<Database> logger)
 {
