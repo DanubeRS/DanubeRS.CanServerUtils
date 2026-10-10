@@ -398,12 +398,18 @@ public static class DbcParser
             .Or(NewSymbols.Try().Select(s => ToplevelStatement.For(s)))
             .Or(BitTiming.Try().Select(s => ToplevelStatement.For(s)))
             .Or(Nodes.Try().Select(s => ToplevelStatement.For(s)))
-            .Or(Message.Try().Select(s => ToplevelStatement.For(s)))
-            .Or(Comment.Try().Select(s => ToplevelStatement.For(s)))
-            .Or(AttributeDefinition.Try().Select(s => ToplevelStatement.For(s)))
-            .Or(AttributeDefaults.Try().Select(s => ToplevelStatement.For(s)))
-            .Or(AttributeValue.Try().Select(s => ToplevelStatement.For(s)))
-            .Or(ValueDescription.Try().Select(s => ToplevelStatement.For(s)))
+            // No .Try() on keyword-unique branches (BO_/CM_/BA_DEF_/BA_DEF_DEF_/BA_/VAL_):
+            // a failure inside such a statement must surface with its actual position
+            // (e.g. junk inside a BO_ block) rather than rewinding to the keyword and
+            // letting AtEnd blame the whole message header. Try only where branches share
+            // a prefix (VAL_ signal-vs-env form, handled inside its own alternation) or
+            // for the speculative heads (VERSION without trailing separator etc.).
+            .Or(Message.Select(s => ToplevelStatement.For(s)))
+            .Or(Comment.Select(s => ToplevelStatement.For(s)))
+            .Or(AttributeDefinition.Select(s => ToplevelStatement.For(s)))
+            .Or(AttributeDefaults.Select(s => ToplevelStatement.For(s)))
+            .Or(AttributeValue.Select(s => ToplevelStatement.For(s)))
+            .Or(ValueDescription.Select(s => ToplevelStatement.For(s)))
             .Or(UnknownStatement.Try().Select(s => ToplevelStatement.For(s)));
 
     private static TokenListParser<DbcTokens, ParsedDb> BuildDatabaseParser()
