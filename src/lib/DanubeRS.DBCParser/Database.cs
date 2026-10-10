@@ -20,6 +20,9 @@ public class Database
         _logger = logger ?? NullLogger<Database>.Instance;
     }
 
+    /// <summary>CAN identifiers are unsigned 11/29-bit values; file IDs carry the extended flag, joins mask it.</summary>
+    internal static uint MaskedId(uint id) => id & 0x1FFFFFFFu;
+
     public class SignalDefinition(Message message, Signal signal, ParsedDb db)
     {
         public Signal Signal { get; } = signal;
@@ -29,12 +32,12 @@ public class Database
 
         public string[] Comments { get; } = db.Comments
             .OfType<SignalComment>()
-            .Where(c => c.MessageId == message.Header.Id && c.SignalName == signal.Name)
+            .Where(c => MaskedId(c.MessageId) == MaskedId(message.Header.Id) && c.SignalName == signal.Name)
             .Select(c => c.Comment)
             .ToArray();
 
         public IReadOnlyDictionary<long, string>? ValueLookup { get; } = db.ValueDescriptions
-            .FirstOrDefault(v => v.MessageId == message.Header.Id && v.SignalName == signal.Name)?.Values;
+            .FirstOrDefault(v => MaskedId(v.MessageId ?? 0) == MaskedId(message.Header.Id) && v.SignalName == signal.Name)?.Values;
     }
 
     public readonly record struct SignalBounds(int MinBit, int MaxBit)
@@ -85,7 +88,7 @@ public class Database
             IsMultiplexed = message.Signals.Any(s => s.Multiplex is { IsSwitch: true });
             Comments = db.Comments
                 .OfType<MessageComment>()
-                .Where(c => c.MessageId == message.Header.Id)
+                .Where(c => MaskedId(c.MessageId) == MaskedId(message.Header.Id))
                 .Select(c => c.Comment)
                 .ToArray();
 
@@ -98,8 +101,13 @@ public class Database
     }
 
     private readonly Dictionary<uint, MessageDefinition> _messageDefn = new();
-    private readonly byte[] _signalValueBytes = new byte[8];
 
+    /// <summary>
+    /// The stored key is the 29-bit CAN ID (file IDs masked with 0x1FFFFFFF: DBC files
+    /// conventionally set the 0x80000000 extended-frame flag, but a frame coming off the bus
+    /// carries the bare 29-bit ID). The file's exact ID is preserved on MessageHeader.
+    /// </summary>
+    private static uint LookupKey(uint id) => id & 0x1FFFFFFFu;
     /// <summary>
     /// Attributes defined in the file (BA_DEF_ sections).
     /// </summary>
@@ -185,7 +193,7 @@ public class Database
 
         foreach (var message in parsed.Messages)
         {
-            var id = (uint)message.Header.Id;
+            var id = LookupKey(message.Header.Id);
             if (!_messageDefn.TryAdd(id, new MessageDefinition(message, parsed)))
             {
                 // First definition wins; make the dropped duplicate visible.
@@ -200,7 +208,7 @@ public class Database
         [NotNullWhen(true)] out MessageDefinition? defn)
     {
         value = null;
-        if (!_messageDefn.TryGetValue((uint)frameId, out defn))
+        if (!_messageDefn.TryGetValue(LookupKey(frameId), out defn))
         {
             return false;
         }
@@ -253,7 +261,7 @@ public class Database
     /// Extracts the raw (untransformed) bit value of a signal; no offset/factor applied.
     /// Used for mux switch selection where the physical scaling must not participate.
     /// </summary>
-    private ulong ExtractRaw(BitArray data, SignalDefinition signal) =>
+    private static ulong ExtractRaw(BitArray data, SignalDefinition signal) =>
         signal.Signal.Order == Endianness.Big
             ? ExtractMotorola(data, signal.Signal.StartBit, signal.Signal.Size)
             : ExtractLittleEndian(data, signal.Signal.StartBit, signal.Signal.Size);
@@ -281,24 +289,21 @@ public class Database
 
     /// <summary>
     /// Little-endian (Intel, '@1') extraction: startBit is the LSB; bits ascend into higher bytes.
-    /// Returns the unsigned raw value; Size must be 0..64.
+    /// Returns the unsigned raw value; Size must be 0..64. Uses a per-call stack buffer —
+    /// safe for concurrent decodes on the same Database instance.
     /// </summary>
-    private ulong ExtractLittleEndian(BitArray data, int startBit, int size)
+    private static ulong ExtractLittleEndian(BitArray data, int startBit, int size)
     {
-        Array.Clear(_signalValueBytes);
-        var byteCount = Math.Min(8, (size + 7) / 8);
+        Span<byte> bytes = stackalloc byte[8];
+        bytes.Clear();
         for (var i = 0; i < size; i++)
         {
             var bitIndex = startBit + i;
             if (!data[bitIndex]) continue;
-            _signalValueBytes[i / 8] |= (byte)(1 << (i % 8));
+            bytes[i / 8] |= (byte)(1 << (i % 8));
         }
 
-        // Clear any stale bytes beyond this signal's span (buffer is shared across signals).
-        for (var b = byteCount; b < 8; b++)
-            _signalValueBytes[b] = 0;
-
-        return BitConverter.ToUInt64(_signalValueBytes, 0);
+        return BitConverter.ToUInt64(bytes);
     }
 
     /// <summary>
@@ -306,7 +311,7 @@ public class Database
     /// LSB0 numbering; subsequent bits descend toward the LSB of the same byte, then continue at
     /// the MSB of the next byte (sawtooth sequence). Returns the raw unsigned value.
     /// </summary>
-    private ulong ExtractMotorola(BitArray data, int startBit, int size)
+    private static ulong ExtractMotorola(BitArray data, int startBit, int size)
     {
         var bitPos = startBit;
         ulong raw = 0;
@@ -414,4 +419,4 @@ public class Database
 
 public record SignalValue(string SignalName, double Value);
 
-public record MessageValue(int MessageId, string MessageName, SignalValue[] Signals, uint? MultiplexValue);
+public record MessageValue(uint MessageId, string MessageName, SignalValue[] Signals, uint? MultiplexValue);

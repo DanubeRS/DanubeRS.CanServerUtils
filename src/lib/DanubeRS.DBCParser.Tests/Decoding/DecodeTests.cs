@@ -833,4 +833,103 @@ SG_MUL_VAL_ 100 Be Be 1 [0|1];
         defn!.Header.Name.Should().Be("Status");
     }
 
+
+    // Regression: 29-bit / extended CAN IDs parse and decode (uint pathway).
+    [Fact]
+    public void ExtendedFrameIds_ParseAndDecode()
+    {
+        var database = new Database();
+        const string dbc = """
+VERSION ""
+
+NS_ :
+	CM_
+
+BS_:
+
+BU_: A
+
+BO_ 2147487596 X10msg: 8 A
+ SG_ X : 0|16@1+ (0.01,0) [0|655.35] "km/h"  A
+
+BO_ 4294967295 MaxId: 8 A
+ SG_ Y : 0|8@1+ (1,0) [0|255] ""  A
+
+
+""";
+        database.AddFile(new StringReader(dbc));
+
+        // 2147487596 = 0x80000F6C — the file stores the extended-frame flag; a frame off the
+        // bus carries the bare 29-bit ID 0xF6C (3948). Both must find the same definition.
+        database.TryParseBinaryMessage(2147487596u, new byte[] { 0x10, 0x27, 0, 0, 0, 0, 0, 0 }, out var v1, out var d1)
+            .Should().BeTrue();
+        d1!.Header.Name.Should().Be("X10msg");
+        v1!.Signals[0].Value.Should().Be(100.0); // 0x2710=10000 * 0.01
+
+        database.TryParseBinaryMessage(3948u, new byte[] { 0x10, 0x27, 0, 0, 0, 0, 0, 0 }, out var v2, out var d2)
+            .Should().BeTrue();
+        d2!.Header.Name.Should().Be("X10msg");
+
+        // 4294967295 = 0xFFFFFFFF masks to 0x1FFFFFFF.
+        database.TryParseBinaryMessage(4294967295u, new byte[] { 5, 0, 0, 0, 0, 0, 0, 0 }, out var v3, out var d3)
+            .Should().BeTrue();
+        d3!.Header.Name.Should().Be("MaxId");
+        v3!.Signals[0].Value.Should().Be(5);
+    }
+
+    // Oracle: multi-byte Motorola sawtooth jumps; 7|32@0 across bytes 0-3 is a plain big-endian read.
+    [Fact]
+    public void MotorolaMultiByte_BigEndianRead()
+    {
+        var database = new Database();
+        const string dbc = """
+VERSION ""
+
+NS_ :
+	CM_
+
+BS_:
+
+BU_: A
+
+BO_ 100 M: 8 A
+ SG_ Be32 : 7|32@0+ (1,0) [0|4294967295] ""  A
+ SG_ Be16 : 39|16@0+ (1,0) [0|65535] ""  A
+
+
+""";
+        database.AddFile(new StringReader(dbc));
+
+        // Be32: bytes 0..3 big-endian = 0x12345678 = 305419896.
+        // Be16: start 39 = MSB of byte 4; sawtooth covers bits 39..32,47..40 → bytes 4,5 big-endian = 0x9A,0xBC.
+        database.TryParseBinaryMessage(100, new byte[] { 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0, 0 }, out var value, out _)
+            .Should().BeTrue();
+        var byName = value!.Signals.ToDictionary(s => s.SignalName, s => s.Value);
+        byName["Be32"].Should().Be(305419896d);
+        byName["Be16"].Should().Be(0x9ABC); // 39548
+    }
+
+
+    // Regression: concurrent decodes on one Database instance are safe (no shared mutable buffer).
+    [Fact]
+    public void ConcurrentDecodes_ThreadSafe()
+    {
+        var database = new Database();
+        database.AddFile(new StringReader(MinimalDbc));
+        const int Threads = 8, Frames = 10_000;
+        var failures = 0;
+        Parallel.For(0, Threads, _ =>
+        {
+            for (var i = 0; i < Frames; i++)
+            {
+                var payload = BitConverter.GetBytes((uint)i);
+                var expected = payload[0]; // signal A = 0|8@1+ factor 1 → low byte
+                if (!database.TryParseBinaryMessage(1, payload, out var value, out var defn) ||
+                    value!.Signals[0].Value != expected)
+                    Interlocked.Increment(ref failures);
+            }
+        });
+        failures.Should().Be(0);
+    }
+
 }
