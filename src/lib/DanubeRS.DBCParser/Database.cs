@@ -24,18 +24,68 @@ public class Database(ILogger<Database> logger)
             .FirstOrDefault(v => v.MessageId == message.Header.Id && v.SignalName == signal.Name)?.Values;
     }
 
-    public class MessageDefinition(Message message, ParsedDb db)
+    public readonly record struct SignalBounds(int MinBit, int MaxBit)
     {
-        public readonly SignalDefinition[] Signals =
-            message.Signals.Select(s => new SignalDefinition(message, s, db)).ToArray();
+        public static SignalBounds For(Signal s)
+        {
+            if (s.Order == Endianness.Little)
+                // Intel: startBit is the LSB, bits ascend contiguously.
+                return new SignalBounds(s.StartBit, s.StartBit + s.Size - 1);
 
-        public readonly MessageHeader Header = message.Header;
-        public readonly bool IsMultiplexed = message.Signals.Any(s => s.Multiplex is { IsSwitch: true });
-        public readonly string[] Comments = db.Comments
-            .OfType<MessageComment>()
-            .Where(c => c.MessageId == message.Header.Id)
-            .Select(c => c.Comment)
-            .ToArray();
+            // Motorola sawtooth: bits descend within a byte, then continue at the MSB of the next.
+            var minBit = s.StartBit;
+            var maxBit = s.StartBit;
+            var bitPos = s.StartBit;
+            for (var i = 1; i < s.Size; i++)
+            {
+                bitPos = bitPos % 8 == 0 ? bitPos + 15 : bitPos - 1;
+                maxBit = bitPos;
+                if (bitPos < minBit) minBit = bitPos;
+            }
+
+            return new SignalBounds(minBit, maxBit);
+        }
+
+        public bool FitsIn(int totalBits) => MinBit >= 0 && MaxBit < totalBits;
+    }
+
+    public class MessageDefinition
+    {
+        public readonly SignalDefinition[] Signals;
+        public readonly MessageHeader Header;
+        public readonly bool IsMultiplexed;
+        public readonly string[] Comments;
+
+        /// <summary>Endianness-aware bit bounds, index-aligned with <see cref="Signals"/>.</summary>
+        public readonly SignalBounds[] SignalBounds;
+
+        /// <summary>Signals that decode for every multiplex value (no m&lt;N&gt; selector), if any.</summary>
+        public readonly SignalDefinition[] CommonSignals;
+
+        /// <summary>The multiplexer switch signal (M), when present.</summary>
+        public readonly SignalDefinition? MultiplexSignal;
+
+        /// <summary>Grouped m&lt;N&gt; signals by mux value, for O(1) lookup per frame.</summary>
+        public readonly IReadOnlyDictionary<uint, SignalDefinition[]> MuxGroups;
+
+        public MessageDefinition(Message message, ParsedDb db)
+        {
+            Signals = message.Signals.Select(s => new SignalDefinition(message, s, db)).ToArray();
+            Header = message.Header;
+            IsMultiplexed = message.Signals.Any(s => s.Multiplex is { IsSwitch: true });
+            Comments = db.Comments
+                .OfType<MessageComment>()
+                .Where(c => c.MessageId == message.Header.Id)
+                .Select(c => c.Comment)
+                .ToArray();
+
+            SignalBounds = Signals.Select(sd => Database.SignalBounds.For(sd.Signal)).ToArray();
+            CommonSignals = Signals.Where(sd => sd.Signal.Multiplex is null).ToArray();
+            MultiplexSignal = Signals.FirstOrDefault(sd => sd.Signal.Multiplex is { IsSwitch: true });
+            MuxGroups = Signals.Where(sd => sd.Signal.Multiplex is { IsSwitch: false })
+                .GroupBy(sd => (uint)sd.Signal.Multiplex!.SwitchValue!.Value)
+                .ToDictionary(g => g.Key, g => g.ToArray());
+        }
     }
 
     private readonly Dictionary<uint, MessageDefinition> _messageDefn = new();
@@ -135,7 +185,6 @@ public class Database(ILogger<Database> logger)
 
     private bool TryParseRegularMessage(MessageDefinition defn, BitArray data, out MessageValue? value)
     {
-        value = null;
         if (defn.Signals.Length == 0)
         {
             // Known message without signals: succeed with an empty value rather than
@@ -143,9 +192,12 @@ public class Database(ILogger<Database> logger)
             value = new MessageValue(defn.Header.Id, defn.Header.Name, [], null);
             return true;
         }
-        var lastSignal = defn.Signals.OrderByDescending(s => s.Signal.StartBit).First();
-        // Message size is incompatable
-        if (lastSignal.Signal.StartBit + lastSignal.Signal.Size > data.Length) return false;
+
+        if (!BoundsFit(defn.Signals, defn.SignalBounds, data.Length))
+        {
+            value = null;
+            return false;
+        }
 
         // Signals are already ordered by start bit at parse time — no per-frame re-sort.
         value = new MessageValue(defn.Header.Id, defn.Header.Name,
@@ -154,29 +206,81 @@ public class Database(ILogger<Database> logger)
         return true;
     }
 
+    private static bool BoundsFit(SignalDefinition[] signals, SignalBounds[] bounds, int totalBits)
+    {
+        for (var i = 0; i < signals.Length; i++)
+        {
+            if (!bounds[i].FitsIn(totalBits)) return false;
+        }
+
+        return true;
+    }
+
     private SignalValue GetSignalValue(BitArray data, SignalDefinition signal)
     {
-        Array.Clear(_signalValueBytes);
-        BitsToBytes(data, signal.Signal.StartBit, signal.Signal.Size, _signalValueBytes);
+        var rawValue = signal.Signal.Order == Endianness.Big
+            ? ExtractMotorola(data, signal.Signal.StartBit, signal.Signal.Size)
+            : ExtractLittleEndian(data, signal.Signal.StartBit, signal.Signal.Size);
 
         double value;
-        if (signal.Signal.ValueType == ValueType.Signed)
+        if (signal.Signal.ValueType == ValueType.Signed && signal.Signal.Size <= 64)
         {
-            var rawValue = BitConverter.ToInt64(_signalValueBytes, 0);
-            rawValue = rawValue >> (signal.Signal.Size - 1) == 0
-                ? rawValue
-                : -1 ^ CreateBitMask(0, signal.Signal.Size) | rawValue;
-            value = signal.Signal.Offset + rawValue * signal.Signal.Factor;
+            // Arithmetic shift left then right sign-extends the low/high Size bits uniformly
+            // for both Intel (LSB-first) and Motorola (MSB-first) raw values.
+            var signedRaw = (long)rawValue << (64 - signal.Signal.Size) >> (64 - signal.Signal.Size);
+            value = signal.Signal.Offset + signedRaw * signal.Signal.Factor;
         }
         else
         {
-            // Unsigned: compute in floating point so full 64-bit range (max 2^64-1) is preserved
-            // instead of wrapping to negative via the long cast.
-            var rawValue = BitConverter.ToUInt64(_signalValueBytes, 0);
-            value = signal.Signal.Offset + rawValue * (double)signal.Signal.Factor;
+            // Unsigned: compute in floating point so full 64-bit range (max 2^64-1) is preserved.
+            value = signal.Signal.Offset + (double)rawValue * signal.Signal.Factor;
         }
 
         return new SignalValue(signal.Signal.Name, value);
+    }
+
+    /// <summary>
+    /// Little-endian (Intel, '@1') extraction: startBit is the LSB; bits ascend into higher bytes.
+    /// Returns the unsigned raw value; Size must be 0..64.
+    /// </summary>
+    private ulong ExtractLittleEndian(BitArray data, int startBit, int size)
+    {
+        Array.Clear(_signalValueBytes);
+        var byteCount = Math.Min(8, (size + 7) / 8);
+        for (var i = 0; i < size; i++)
+        {
+            var bitIndex = startBit + i;
+            if (!data[bitIndex]) continue;
+            _signalValueBytes[i / 8] |= (byte)(1 << (i % 8));
+        }
+
+        // Clear any stale bytes beyond this signal's span (buffer is shared across signals).
+        for (var b = byteCount; b < 8; b++)
+            _signalValueBytes[b] = 0;
+
+        return BitConverter.ToUInt64(_signalValueBytes, 0);
+    }
+
+    /// <summary>
+    /// Big-endian (Motorola, '@0') extraction per the DBC spec: startBit is the MSB position in
+    /// LSB0 numbering; subsequent bits descend toward the LSB of the same byte, then continue at
+    /// the MSB of the next byte (sawtooth sequence). Returns the raw unsigned value.
+    /// </summary>
+    private ulong ExtractMotorola(BitArray data, int startBit, int size)
+    {
+        var bitPos = startBit;
+        ulong raw = 0;
+        for (var i = 0; i < size; i++)
+        {
+            if (data[bitPos])
+                raw |= 1UL << (size - 1 - i);
+
+            bitPos = bitPos % 8 == 0
+                ? bitPos + 15 // reached the LSB of this byte → jump to MSB of the next
+                : bitPos - 1;
+        }
+
+        return raw;
     }
 
     private static long CreateBitMask(int start, int length)
@@ -209,25 +313,39 @@ public class Database(ILogger<Database> logger)
 
     private bool TryParseMultiplexedMessage(MessageDefinition defn, BitArray data, out MessageValue? value)
     {
-        value = default;
+        var multiplexSignal = defn.MultiplexSignal;
+        if (multiplexSignal is null)
+        {
+            value = null;
+            return false;
+        }
 
-        var multiplexSignal = defn.Signals.Single(s => s.Signal.Multiplex is { IsSwitch: true });
+        // Extract the switch value at full width (spec allows mux switches wider than 16 bits).
+        var switchValue = (uint)GetSignalValue(data, multiplexSignal).Value;
 
-        var switchBytes = new byte[2];
-        BitsToBytes(data, multiplexSignal.Signal.StartBit, multiplexSignal.Signal.Size, switchBytes);
-        var switchValue = BitConverter.ToUInt16(switchBytes);
-        var filteredSignals = defn.Signals
-            .Where(s => s.Signal.Multiplex != null && s.Signal.Multiplex.SwitchValue == switchValue)
-            .ToArray();
+        var muxGroup = defn.MuxGroups.TryGetValue(switchValue, out var group)
+            ? group
+            : [];
 
-        var lastSignal = filteredSignals.OrderByDescending(s => s.Signal.StartBit).FirstOrDefault();
-        if (lastSignal == null) return false;
+        // Spec: signals without an m<N> selector decode for every mux value; the switch signal
+        // itself decodes always. A frame mux value with no matching group must not drop the
+        // message — it still yields switch + common signals.
+        var signals = new List<SignalDefinition>(1 + defn.CommonSignals.Length + muxGroup.Length)
+        {
+            multiplexSignal
+        };
+        signals.AddRange(defn.CommonSignals);
+        signals.AddRange(muxGroup);
 
-        // Message size is incompatible
-        if (lastSignal.Signal.StartBit + lastSignal.Signal.Size > data.Length) return false;
+        if (signals.Any(s => !SignalBounds.For(s.Signal).FitsIn(data.Length)))
+        {
+            value = null;
+            return false;
+        }
 
         value = new MessageValue(defn.Header.Id, defn.Header.Name,
-            filteredSignals.Select(signal => GetSignalValue(data, signal)).ToArray(), switchValue);
+            signals.Select(signal => GetSignalValue(data, signal)).ToArray(),
+            switchValue);
 
         return true;
     }

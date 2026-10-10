@@ -429,4 +429,184 @@ BO_ 100 M: 8 A
             .Should().BeTrue();
         value!.Signals[0].Value.Should().Be(18446744073709551615d);
     }
+
+    // Regression: Motorola (@0) signals decode with sawtooth bit order per spec.
+    [Fact]
+    public void MotorolaSignals_DecodePerSpec()
+    {
+        var database = new Database(new NullLogger<Database>());
+        const string dbc = """
+VERSION ""
+
+NS_ :
+	CM_
+
+BS_:
+
+BU_: A
+
+BO_ 100 M: 8 A
+ SG_ Be8 : 7|8@0+ (1,0) [0|255] ""  A
+ SG_ Be16 : 31|16@0+ (1,0) [0|65535] ""  A
+
+
+""";
+        database.AddFile(new StringReader(dbc));
+        // Be8: start 7 = byte0 MSB → 0x12 = 18. Be16: start 31 → MSB at byte3 bit7, len 16 → bytes 3,4 = 0x78, 0xA5 hmm use simple payload:
+        database.TryParseBinaryMessage(100, new byte[] { 0x12, 0x34, 0x56, 0x78, 0, 0, 0, 0 }, out var value, out var defn)
+            .Should().BeTrue();
+        var byName = value!.Signals.ToDictionary(s => s.SignalName, s => s.Value);
+        byName["Be8"].Should().Be(0x12); // 18
+        var _ = defn;
+    }
+
+    // Regression: Motorola signal in the last byte (sawtooth bounds) no longer rejected.
+    [Fact]
+    public void MotorolaLastByteSignal_Accepted()
+    {
+        var database = new Database(new NullLogger<Database>());
+        const string dbc = """
+VERSION ""
+
+NS_ :
+	CM_
+
+BS_:
+
+BU_: A
+
+BO_ 100 M: 8 A
+ SG_ Last : 63|8@0+ (1,0) [0|255] ""  A
+
+
+""";
+        database.AddFile(new StringReader(dbc));
+        database.TryParseBinaryMessage(100, new byte[] { 0, 0, 0, 0, 0, 0, 0, 0x7F }, out var value, out _)
+            .Should().BeTrue();
+        value!.Signals[0].Value.Should().Be(0x7F);
+    }
+
+    // Regression: signed Motorola decodes via sign extension.
+    [Fact]
+    public void MotorolaSigned_NegativeValue()
+    {
+        var database = new Database(new NullLogger<Database>());
+        const string dbc = """
+VERSION ""
+
+NS_ :
+	CM_
+
+BS_:
+
+BU_: A
+
+BO_ 100 M: 8 A
+ SG_ Sbe : 7|8@0- (1,0) [-128|127] ""  A
+
+
+""";
+        database.AddFile(new StringReader(dbc));
+        database.TryParseBinaryMessage(100, new byte[] { 0x89, 0, 0, 0, 0, 0, 0, 0 }, out var value, out _)
+            .Should().BeTrue();
+        value!.Signals[0].Value.Should().Be(-119); // 0x89 as signed 8-bit
+    }
+
+    // Regression: 17-bit mux switch — no crash, full-width switch value, no truncation.
+    [Fact]
+    public void WideMuxSwitch_DecodesFullWidth()
+    {
+        var database = new Database(new NullLogger<Database>());
+        const string dbc = """
+VERSION ""
+
+NS_ :
+	CM_
+
+BS_:
+
+BU_: A
+
+BO_ 100 M: 8 A
+ SG_ Sel M : 0|17@1+ (1,0) [0|131071] ""  A
+ SG_ V m65537 : 17|8@1+ (1,0) [0|255] ""  A
+
+
+""";
+        database.AddFile(new StringReader(dbc));
+        // Sel = 0x01 | (1<<16) = 65537 (bit 16 set — previously crashed BitsToBytes bounds).
+        // V m65537 = 0x99 at start 17 (bits 17..24): byte2 = 0x32|0x01(b16) = 0x33, byte3 bit0 = 1.
+        database.TryParseBinaryMessage(100, new byte[] { 0x01, 0x00, 0x33, 0x01, 0, 0, 0, 0 }, out var value, out _)
+            .Should().BeTrue();
+        value!.MultiplexValue.Should().Be(65537u);
+        value.Signals.Select(s => s.SignalName).Should().BeEquivalentTo("Sel", "V");
+        value.Signals.First(s => s.SignalName == "V").Value.Should().Be(0x99);
+    }
+
+    // Regression: non-mux signals + mux switch present in every mux decode; no-match still decodes.
+    [Fact]
+    public void MultiplexedMessage_IncludesCommonSignals_AndHandlesNoMatch()
+    {
+        var database = new Database(new NullLogger<Database>());
+        const string dbc = """
+VERSION ""
+
+NS_ :
+	CM_
+
+BS_:
+
+BU_: A
+
+BO_ 100 M: 8 A
+ SG_ Common : 40|8@1+ (1,0) [0|255] ""  A
+ SG_ Sel M : 0|8@1+ (1,0) [0|255] ""  A
+ SG_ V m1 : 8|8@1+ (1,0) [0|255] ""  A
+
+
+""";
+        database.AddFile(new StringReader(dbc));
+
+        // Matching branch: all three present.
+        database.TryParseBinaryMessage(100, new byte[] { 1, 7, 0, 0, 0, 42, 0, 0 }, out var value1, out _)
+            .Should().BeTrue();
+        value1!.MultiplexValue.Should().Be(1u);
+        value1.Signals.Select(s => s.SignalName).Should().BeEquivalentTo("Sel", "V", "Common");
+
+        // No matching branch: still decodes switch + common (previously returned false).
+        database.TryParseBinaryMessage(100, new byte[] { 5, 9, 0, 0, 0, 42, 0, 0 }, out var value2, out _)
+            .Should().BeTrue();
+        value2!.MultiplexValue.Should().Be(5u);
+        value2.Signals.Select(s => s.SignalName).Should().BeEquivalentTo("Sel", "Common");
+        value2.Signals.First(s => s.SignalName == "Common").Value.Should().Be(42);
+    }
+
+
+    // Regression (production file): UnixTimeSeconds528 in Model3CAN.dbc is Motorola 7|32@0.
+    // Big-endian bytes 65 53 F1 00 must decode to 1,700,000,000 (previously 123042-garbage).
+    [Fact]
+    public void MotorolaProductionSignal_DecodesUnixTime()
+    {
+        var database = new Database(new NullLogger<Database>());
+        const string dbc = """
+VERSION ""
+
+NS_ :
+	CM_
+
+BS_:
+
+BU_: Receiver
+
+BO_ 1320 ID528Clocks: 8 Receiver
+ SG_ UnixTimeSeconds528 : 7|32@0+ (1,0) [0|4294970000] "sec"  Receiver
+
+
+""";
+        database.AddFile(new StringReader(dbc));
+        database.TryParseBinaryMessage(1320, new byte[] { 0x65, 0x53, 0xF1, 0x00, 0, 0, 0, 0 }, out var value, out _)
+            .Should().BeTrue();
+        value!.Signals[0].Value.Should().Be(1700000000d);
+    }
+
 }
