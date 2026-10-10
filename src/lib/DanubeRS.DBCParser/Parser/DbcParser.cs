@@ -431,8 +431,11 @@ public static class DbcParser
                 return TokenListParserResult.Value(Unit.Value, input, input);
 
             var next = input.ConsumeToken();
-            var at = next.HasValue ? next.Remainder : input;
-            return TokenListParserResult.Empty<DbcTokens, Unit>(at, "end of file");
+            var found = next.HasValue ? $"`{next.Value.Span.ToStringValue()}`" : "unknown content";
+            // Report at `input` so the error position points AT the offending token,
+            // not past it.
+            return TokenListParserResult.Empty<DbcTokens, Unit>(input,
+                $"end of file after the previous section (unparsed token {found})");
         };
 
     private static ParsedDb Reduce(ToplevelStatement[] statements)
