@@ -15,7 +15,9 @@ public static class DbcTokenizer
         from close in Character.EqualTo('"')
         select Unit.Value;
 
-    public static Tokenizer<DbcTokens> Instance =>
+    public static readonly Tokenizer<DbcTokens> Instance = Build();
+
+    private static Tokenizer<DbcTokens> Build() =>
         new TokenizerBuilder<DbcTokens>()
             .Match(Span.Regex("[\n]{2,}"), DbcTokens.DefinitionEnd)
             .Match(Span.Regex("(\r\n){2,}"), DbcTokens.DefinitionEnd)

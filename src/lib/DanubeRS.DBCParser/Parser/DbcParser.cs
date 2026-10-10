@@ -69,13 +69,16 @@ public static class DbcParser
         Multiplexed.Or(Multiplexer);
 
     private static TokenListParser<DbcTokens, int> Integer { get; } =
-        Token.EqualTo(DbcTokens.Integer).Or(Token.EqualTo(DbcTokens.Double)).Select(t => int.Parse(t.ToStringValue()));
+        Token.EqualTo(DbcTokens.Integer).Or(Token.EqualTo(DbcTokens.Double))
+            .Where(t => int.TryParse(t.ToStringValue(), NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+            .Select(t => int.Parse(t.ToStringValue(), NumberStyles.Integer, CultureInfo.InvariantCulture));
 
     private static TokenListParser<DbcTokens, double> Scientific { get; } =
-        Token.EqualTo(DbcTokens.Sci).Select(t => double.Parse(t.ToStringValue(), NumberStyles.Float));
+        Token.EqualTo(DbcTokens.Sci).Select(t => double.Parse(t.ToStringValue(), NumberStyles.Float, CultureInfo.InvariantCulture));
 
     private static TokenListParser<DbcTokens, double> Double { get; } = Token.EqualTo(DbcTokens.Integer)
-        .Or(Token.EqualTo(DbcTokens.Double)).Select(t => double.Parse(t.ToStringValue()));
+        .Or(Token.EqualTo(DbcTokens.Double))
+        .Select(t => double.Parse(t.ToStringValue(), NumberStyles.Float, CultureInfo.InvariantCulture));
 
     private static TokenListParser<DbcTokens, bool> Boolean { get; } = Integer.Select(Convert.ToBoolean);
 
@@ -87,7 +90,21 @@ public static class DbcParser
 
     private static TokenListParser<DbcTokens, string> QuotedString { get; } =
         Token.EqualTo(DbcTokens.String)
-            .Select(s => s.ToStringValue());
+            .Select(s =>
+            {
+                // Token span includes the surrounding quotes; strip them and unescape \" escapes.
+                var text = s.ToStringValue();
+                if (text.Length >= 2 && text[0] == '"' && text[^1] == '"')
+                {
+                    var content = text[1..^1];
+                    return content.Replace("\\\"", "\"").Replace("\\\\", "\\");
+                }
+                return text;
+            });
+
+    private static TokenListParser<DbcTokens, string> ReceiverList { get; } =
+        Identifier.ManyDelimitedBy(Token.EqualTo(DbcTokens.Comma))
+            .Select(receivers => string.Join(", ", receivers));
 
     private static TokenListParser<DbcTokens, Signal> Signal { get; } =
         from sgKeyword in Token.EqualToValue(DbcTokens.Identifier, "SG_")
@@ -111,9 +128,9 @@ public static class DbcParser
         from max in Double.Or(Scientific)
         from rSquParen in Token.EqualTo(DbcTokens.RSqParen)
         from unit in QuotedString
-        from reciever in Identifier
+        from receivers in ReceiverList
         select new Signal(signalName, multiplexIdentifier, startBit, signalSize, order, valueType,
-            factor, offset, min, max, unit, reciever);
+            factor, offset, min, max, unit, receivers);
 
     private static TokenListParser<DbcTokens, Message> Message { get; } =
         from header in MessageHeader
@@ -171,18 +188,21 @@ public static class DbcParser
         from keyword in NamedIdentifier("INT")
         from min in Integer
         from max in Integer
+        where min <= max
         select (AttributeValueType)new IntAttributeValueType(min, max);
 
     private static TokenListParser<DbcTokens, AttributeValueType> HexAttributeValueType { get; } =
         from keyword in NamedIdentifier("HEX")
         from min in Integer
         from max in Integer
+        where min <= max
         select (AttributeValueType)new HexAttributeValueType(min, max);
 
     private static TokenListParser<DbcTokens, AttributeValueType> FloatAttributeValueType { get; } =
-        from keyword in NamedIdentifier("INT")
+        from keyword in NamedIdentifier("FLOAT")
         from min in Double
         from max in Double
+        where min <= max
         select (AttributeValueType)new FloatAttributeValueType(min, max);
 
     private static TokenListParser<DbcTokens, AttributeValueType> StringAttributeValueType { get; } =
@@ -214,12 +234,14 @@ public static class DbcParser
         select new AttributeDefinition(objectType, attributeName, attributeValueType);
 
     private static TokenListParser<DbcTokens, AttributeDefaultValue> IntegerAttributeDefaultValue { get; } =
-        Token.EqualTo(DbcTokens.Integer).Select(i =>
-            (AttributeDefaultValue)new IntegerAttributeDefaultValue(int.Parse(i.ToStringValue())));
+        Token.EqualTo(DbcTokens.Integer)
+            .Where(i => int.TryParse(i.ToStringValue(), NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+            .Select(i =>
+                (AttributeDefaultValue)new IntegerAttributeDefaultValue(int.Parse(i.ToStringValue(), CultureInfo.InvariantCulture)));
 
     private static TokenListParser<DbcTokens, AttributeDefaultValue> DoubleAttributeDefaultValue { get; } =
         Token.EqualTo(DbcTokens.Double).Select(i =>
-            (AttributeDefaultValue)new DoubleAttributeDefaultValue(double.Parse(i.ToStringValue())));
+            (AttributeDefaultValue)new DoubleAttributeDefaultValue(double.Parse(i.ToStringValue(), CultureInfo.InvariantCulture)));
 
     private static TokenListParser<DbcTokens, AttributeDefaultValue> StringAttributeDefaultValue { get; } =
         QuotedString.Select(i => (AttributeDefaultValue)new StringAttributeDefaultValue(i));
@@ -273,15 +295,36 @@ public static class DbcParser
         from end in Token.EqualTo(DbcTokens.Semicolon)
         select new AttributeValue(attributeName, attributeValue);
 
-    private static TokenListParser<DbcTokens, ValueDescription> ValueDescription { get; } =
+    private static TokenListParser<DbcTokens, ValueDescription> SignalValueDescription { get; } =
         from keyword in NamedIdentifier("VAL_")
         from messageId in Integer
         from signalName in Identifier
         from valueDescriptionValues in Integer
-            .Then((i => QuotedString.Select(s => new KeyValuePair<uint, string>((uint)i, s)))).Many()
+            .Then((i => QuotedString.Select(s => new KeyValuePair<long, string>(i, s)))).Many()
         from end in Token.EqualTo(DbcTokens.Semicolon)
         select new ValueDescription(messageId, signalName,
-            valueDescriptionValues.ToDictionary(kvp => kvp.Key, kvp => kvp.Value).ToImmutableDictionary());
+            ParseValueDescriptionValues(valueDescriptionValues));
+
+    private static TokenListParser<DbcTokens, ValueDescription> EnvValueDescription { get; } =
+        from keyword in NamedIdentifier("VAL_")
+        from envVarName in Identifier
+        from valueDescriptionValues in Integer
+            .Then((i => QuotedString.Select(s => new KeyValuePair<long, string>(i, s)))).Many()
+        from end in Token.EqualTo(DbcTokens.Semicolon)
+        select new ValueDescription(null, envVarName,
+            ParseValueDescriptionValues(valueDescriptionValues));
+
+    private static TokenListParser<DbcTokens, ValueDescription> ValueDescription { get; } =
+        SignalValueDescription.Try().Or(EnvValueDescription);
+
+    private static IImmutableDictionary<long, string> ParseValueDescriptionValues(KeyValuePair<long, string>[] values)
+    {
+        // Last entry wins for duplicate keys (spec is silent; Vector tools keep the last).
+        var builder = ImmutableDictionary.CreateBuilder<long, string>();
+        foreach (var (key, value) in values)
+            builder[key] = value;
+        return builder.ToImmutable();
+    }
 
     public static TokenListParser<DbcTokens, ParsedDb> Database { get; } =
         from version in Version
@@ -301,10 +344,10 @@ public static class DbcParser
         from valueDescriptions in ValueDescription
             .Many()
         select new ParsedDb(version, newSymbols, nodes, messages.OrderBy(m => m.Header.Id).ToArray(),
-            attributeDefinitions, attributeDefaults, attributeValues, valueDescriptions);
+            attributeDefinitions, attributeDefaults, attributeValues, valueDescriptions, comments);
 }
 
-public sealed record ValueDescription(int MessageId, string SignalName, IImmutableDictionary<uint, string> Values);
+public sealed record ValueDescription(int? MessageId, string? SignalName, IImmutableDictionary<long, string> Values);
 
 public sealed record EnvironmentObjectValue(string Name, AttributeDefaultValue Value) : AttributeObjectValue(Value);
 
@@ -337,11 +380,20 @@ public sealed record EnumAttributeValueType(string[] Values) : AttributeValueTyp
 
 public sealed record StringAttributeValueType() : AttributeValueType();
 
-public sealed record FloatAttributeValueType(double Min, double Max) : AttributeValueType();
+public sealed record FloatAttributeValueType(double Min, double Max) : AttributeValueType()
+{
+    public bool IsValid => Min <= Max;
+}
 
-public sealed record HexAttributeValueType(int Min, int Max) : AttributeValueType();
+public sealed record HexAttributeValueType(int Min, int Max) : AttributeValueType()
+{
+    public bool IsValid => Min <= Max;
+}
 
-public sealed record IntAttributeValueType(int Min, int Max) : AttributeValueType();
+public sealed record IntAttributeValueType(int Min, int Max) : AttributeValueType()
+{
+    public bool IsValid => Min <= Max;
+}
 
 public abstract record AttributeValueType();
 
@@ -385,7 +437,8 @@ public record ParsedDb(
     AttributeDefinition[] AttributeDefinitions,
     AttributeDefault[] AttributeDefaults,
     AttributeValue[] AttributeValues,
-    ValueDescription[] ValueDescriptions);
+    ValueDescription[] ValueDescriptions,
+    CommentBase[] Comments);
 
 public record Version(string VersionString);
 
