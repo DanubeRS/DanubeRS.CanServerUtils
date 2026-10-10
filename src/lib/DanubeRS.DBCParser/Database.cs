@@ -14,6 +14,10 @@ public class Database(ILogger<Database> logger)
     public class SignalDefinition(Message message, Signal signal, ParsedDb db)
     {
         public Signal Signal { get; } = signal;
+
+        /// <summary>Endianness-aware bit span of this signal.</summary>
+        public SignalBounds Bounds { get; } = SignalBounds.For(signal);
+
         public string[] Comments { get; } = db.Comments
             .OfType<SignalComment>()
             .Where(c => c.MessageId == message.Header.Id && c.SignalName == signal.Name)
@@ -39,8 +43,8 @@ public class Database(ILogger<Database> logger)
             for (var i = 1; i < s.Size; i++)
             {
                 bitPos = bitPos % 8 == 0 ? bitPos + 15 : bitPos - 1;
-                maxBit = bitPos;
-                if (bitPos < minBit) minBit = bitPos;
+                maxBit = Math.Max(maxBit, bitPos);
+                minBit = Math.Min(minBit, bitPos);
             }
 
             return new SignalBounds(minBit, maxBit);
@@ -55,9 +59,6 @@ public class Database(ILogger<Database> logger)
         public readonly MessageHeader Header;
         public readonly bool IsMultiplexed;
         public readonly string[] Comments;
-
-        /// <summary>Endianness-aware bit bounds, index-aligned with <see cref="Signals"/>.</summary>
-        public readonly SignalBounds[] SignalBounds;
 
         /// <summary>Signals that decode for every multiplex value (no m&lt;N&gt; selector), if any.</summary>
         public readonly SignalDefinition[] CommonSignals;
@@ -79,7 +80,6 @@ public class Database(ILogger<Database> logger)
                 .Select(c => c.Comment)
                 .ToArray();
 
-            SignalBounds = Signals.Select(sd => Database.SignalBounds.For(sd.Signal)).ToArray();
             CommonSignals = Signals.Where(sd => sd.Signal.Multiplex is null).ToArray();
             MultiplexSignal = Signals.FirstOrDefault(sd => sd.Signal.Multiplex is { IsSwitch: true });
             MuxGroups = Signals.Where(sd => sd.Signal.Multiplex is { IsSwitch: false })
@@ -200,7 +200,7 @@ public class Database(ILogger<Database> logger)
             return true;
         }
 
-        if (!BoundsFit(defn.Signals, defn.SignalBounds, data.Length))
+        if (!BoundsFit(defn.Signals, data.Length))
         {
             value = null;
             return false;
@@ -213,21 +213,28 @@ public class Database(ILogger<Database> logger)
         return true;
     }
 
-    private static bool BoundsFit(SignalDefinition[] signals, SignalBounds[] bounds, int totalBits)
+    private static bool BoundsFit(SignalDefinition[] signals, int totalBits)
     {
-        for (var i = 0; i < signals.Length; i++)
+        foreach (var sd in signals)
         {
-            if (!bounds[i].FitsIn(totalBits)) return false;
+            if (!sd.Bounds.FitsIn(totalBits)) return false;
         }
 
         return true;
     }
 
-    private SignalValue GetSignalValue(BitArray data, SignalDefinition signal)
-    {
-        var rawValue = signal.Signal.Order == Endianness.Big
+    /// <summary>
+    /// Extracts the raw (untransformed) bit value of a signal; no offset/factor applied.
+    /// Used for mux switch selection where the physical scaling must not participate.
+    /// </summary>
+    private ulong ExtractRaw(BitArray data, SignalDefinition signal) =>
+        signal.Signal.Order == Endianness.Big
             ? ExtractMotorola(data, signal.Signal.StartBit, signal.Signal.Size)
             : ExtractLittleEndian(data, signal.Signal.StartBit, signal.Signal.Size);
+
+    private SignalValue GetSignalValue(BitArray data, SignalDefinition signal)
+    {
+        var rawValue = ExtractRaw(data, signal);
 
         double value;
         if (signal.Signal.ValueType == ValueType.Signed && signal.Signal.Size <= 64)
@@ -327,8 +334,16 @@ public class Database(ILogger<Database> logger)
             return false;
         }
 
-        // Extract the switch value at full width (spec allows mux switches wider than 16 bits).
-        var switchValue = (uint)GetSignalValue(data, multiplexSignal).Value;
+        // Bounds-check before any bit access: a short frame must fail, never throw.
+        if (!multiplexSignal.Bounds.FitsIn(data.Length))
+        {
+            value = null;
+            return false;
+        }
+
+        // The switch selects groups by RAW value: a factor/offset on the switch signal must
+        // not participate in group selection.
+        var switchValue = (uint)ExtractRaw(data, multiplexSignal);
 
         var muxGroup = defn.MuxGroups.TryGetValue(switchValue, out var group)
             ? group
@@ -344,7 +359,7 @@ public class Database(ILogger<Database> logger)
         signals.AddRange(defn.CommonSignals);
         signals.AddRange(muxGroup);
 
-        if (signals.Any(s => !SignalBounds.For(s.Signal).FitsIn(data.Length)))
+        if (!BoundsFit(signals.ToArray(), data.Length))
         {
             value = null;
             return false;

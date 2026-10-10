@@ -745,4 +745,64 @@ BA_ "VFlag" BO_ 100 1;
         defn!.Header.Name.Should().Be("M");
     }
 
+
+    // Regression: the mux switch selects groups by RAW value; factor/offset must not participate.
+    [Fact]
+    public void MuxSwitchWithFactorOffset_SelectsByRaw()
+    {
+        var database2 = new Database(new NullLogger<Database>());
+        const string dbc2 = """
+VERSION ""
+
+NS_ :
+	CM_
+
+BS_:
+
+BU_: A
+
+BO_ 101 M: 8 A
+ SG_ Sel M : 0|8@1+ (10,0) [0|25.5] "kV"  A
+ SG_ V m2 : 8|8@1+ (1,0) [0|255] ""  A
+
+
+""";
+        database2.AddFile(new StringReader(dbc2));
+        // raw switch = 2 → physical would be 20; must still select m2 and report raw 2
+        database2.TryParseBinaryMessage(101, new byte[] { 2, 7, 0, 0, 0, 0, 0, 0 }, out var value, out _)
+            .Should().BeTrue();
+        value!.MultiplexValue.Should().Be(2u);
+        value.Signals.First(s => s.SignalName == "V").Value.Should().Be(7);
+    }
+
+    // Regression: single-byte Motorola signal bounds account for the whole span (MaxBit starts at StartBit).
+    [Fact]
+    public void SingleByteMotorola_BoundsCoverStart()
+    {
+        var database = new Database(new NullLogger<Database>());
+        const string dbc = """
+VERSION ""
+
+NS_ :
+	CM_
+
+BS_:
+
+BU_: A
+
+BO_ 100 M: 8 A
+ SG_ Be : 7|8@0+ (1,0) [0|255] ""  A
+
+SG_MUL_VAL_ 100 Be Be 1 [0|1];
+
+""";
+        // SG_MUL_VAL_ is unmodeled (skipped); Be: start 7, len 8 sawtooth → bits 7..0, MaxBit=7.
+        // A 1-byte frame (bits 0..7) must fit.
+        database.AddFile(new StringReader(dbc));
+        database.SkippedStatements.Should().Contain("SG_MUL_VAL_");
+        database.TryParseBinaryMessage(100, new byte[] { 0x12 }, out var value, out _)
+            .Should().BeTrue();
+        value!.Signals[0].Value.Should().Be(0x12);
+    }
+
 }
