@@ -112,6 +112,12 @@ public class Database(ILogger<Database> logger)
     public ImmutableArray<CommentBase> Comments { get; private set; } = [];
 
     /// <summary>
+    /// Keywords of recognized-but-unmodeled sections that were skipped during parsing
+    /// (e.g. VAL_TABLE_, SG_MUL_VAL_, SIG_VALTYPE_, BO_TX_BU_, EV_, ENVVAR_DATA_).
+    /// </summary>
+    public ImmutableArray<string> SkippedStatements { get; private set; } = [];
+
+    /// <summary>
     /// Version string from the file.
     /// </summary>
     public string? Version { get; private set; }
@@ -155,6 +161,7 @@ public class Database(ILogger<Database> logger)
 
         AttributeValues = AttributeValues.AddRange(parsed.AttributeValues);
         Comments = Comments.AddRange(parsed.Comments);
+        SkippedStatements = SkippedStatements.AddRange(parsed.SkippedStatements);
         Version ??= parsed.Version.VersionString;
 
         foreach (var message in parsed.Messages)

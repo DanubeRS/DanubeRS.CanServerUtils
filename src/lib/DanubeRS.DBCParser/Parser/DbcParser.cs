@@ -326,26 +326,192 @@ public static class DbcParser
         return builder.ToImmutable();
     }
 
-    public static TokenListParser<DbcTokens, ParsedDb> Database { get; } =
-        from version in Version
-        from newSymbols in NewSymbols
-        from bitTiming in BitTiming
-        from nodes in Nodes
-        from messages in Message
-            .Many()
-        from comments in Comment
-            .Many()
-        from attributeDefinitions in AttributeDefinition
-            .Many()
-        from attributeDefaults in AttributeDefaults
-            .Many()
-        from attributeValues in AttributeValue
-            .Many()
-        from valueDescriptions in ValueDescription
-            .Many()
-        select new ParsedDb(version, newSymbols, nodes, messages.OrderBy(m => m.Header.Id).ToArray(),
-            attributeDefinitions, attributeDefaults, attributeValues, valueDescriptions, comments);
+    /// <summary>
+    /// Catch-all for well-formed but unmodeled sections (VAL_TABLE_, SIG_VALTYPE_, SG_MUL_VAL_,
+    /// BO_TX_BU_, EV_, ENVVAR_DATA_, BA_*_REL_, ...): a keyword identifier plus all tokens up to
+    /// (and including) a semicolon, or a definition-end. Skipped content is recorded in
+    /// ParsedDb.SkippedStatements — nothing silently lost. Malformed KNOWN sections must NOT be
+    /// swallowed by this branch, so reserved keywords are rejected here.
+    /// </summary>
+    private static readonly string[] ReservedKeywords =
+    {
+        "VERSION", "NS_", "BS_", "BU_", "BO_", "SG_", "CM_", "BA_DEF_", "BA_DEF_DEF_", "BA_", "VAL_"
+    };
+
+    private static readonly TokenListParser<DbcTokens, UnknownStatement> UnknownStatement =
+        input =>
+        {
+            // Only an Identifier can head an unknown section; DefinitionEnd (blank line) is a
+            // separator handled by the statement loop, never a statement.
+            var peek = input.ConsumeToken();
+            if (!peek.HasValue || peek.Value.Kind != DbcTokens.Identifier)
+                return TokenListParserResult.Empty<DbcTokens, UnknownStatement>(input);
+
+            var name = peek.Value.ToStringValue();
+            if (Array.IndexOf(ReservedKeywords, name) >= 0)
+            {
+                // A known section keyword: let the typed branches (or AtEnd) report the error
+                // instead of silently swallowing it here.
+                return TokenListParserResult.Empty<DbcTokens, UnknownStatement>(input);
+            }
+
+            var rest = peek.Remainder;
+            var count = 0;
+            while (true)
+            {
+                var token = rest.ConsumeToken();
+                if (!token.HasValue)
+                {
+                    return TokenListParserResult.Empty<DbcTokens, UnknownStatement>(rest, "`;` or section terminator");
+                }
+                rest = token.Remainder;
+                count++;
+                if (token.Value.Kind == DbcTokens.Semicolon)
+                    break;
+                if (token.Value.Kind == DbcTokens.DefinitionEnd)
+                    break; // consumed the section terminator
+            }
+
+            return TokenListParserResult.Value(new UnknownStatement(name, count - 1), input, rest);
+        };
+
+    public static TokenListParser<DbcTokens, ParsedDb> Database { get; } = BuildDatabaseParser();
+
+    // NOTE: static field initializers run in textual order; `Database` must come last,
+    // after every parser it references. `Statement` is a local func-built parser.
+
+    private static TokenListParser<DbcTokens, ToplevelStatement> BuildStatement() =>
+        Version.Try().Select(s => ToplevelStatement.For(s))
+            .Or(NewSymbols.Try().Select(s => ToplevelStatement.For(s)))
+            .Or(BitTiming.Try().Select(s => ToplevelStatement.For(s)))
+            .Or(Nodes.Try().Select(s => ToplevelStatement.For(s)))
+            .Or(Message.Try().Select(s => ToplevelStatement.For(s)))
+            .Or(Comment.Try().Select(s => ToplevelStatement.For(s)))
+            .Or(AttributeDefinition.Try().Select(s => ToplevelStatement.For(s)))
+            .Or(AttributeDefaults.Try().Select(s => ToplevelStatement.For(s)))
+            .Or(AttributeValue.Try().Select(s => ToplevelStatement.For(s)))
+            .Or(ValueDescription.Try().Select(s => ToplevelStatement.For(s)))
+            .Or(UnknownStatement.Try().Select(s => ToplevelStatement.For(s)));
+
+    private static TokenListParser<DbcTokens, ParsedDb> BuildDatabaseParser()
+    {
+        // Sections may appear in any order, any count. DefinitionEnd tokens (blank lines)
+        // act as separators anywhere: leading, between statements, trailing. Unknown
+        // statements (sections not modeled) are skipped but reported via
+        // ParsedDb.SkippedStatements. AtEnd guarantees nothing is silently ignored.
+        var statementWithSeparator =
+            from ends in Token.EqualTo(DbcTokens.DefinitionEnd).Many()
+            from statement in BuildStatement()
+            select statement;
+
+        return from statements in statementWithSeparator.Many()
+               from ends in Token.EqualTo(DbcTokens.DefinitionEnd).Many()
+               from atEnd in AtEndInternal
+               select Reduce(statements);
+    }
+
+    /// <summary>Succeeds only at the true end of the token list; fails with position otherwise.</summary>
+    private static readonly TokenListParser<DbcTokens, Unit> AtEndInternal =
+        input =>
+        {
+            if (input.IsAtEnd)
+                return TokenListParserResult.Value(Unit.Value, input, input);
+
+            var next = input.ConsumeToken();
+            var at = next.HasValue ? next.Remainder : input;
+            return TokenListParserResult.Empty<DbcTokens, Unit>(at, "end of file");
+        };
+
+    private static ParsedDb Reduce(ToplevelStatement[] statements)
+    {
+        Version? version = null;
+        NewSymbols? newSymbols = null;
+        Nodes? nodes = null;
+        var messages = new List<Message>();
+        var comments = new List<CommentBase>();
+        var attributeDefinitions = new List<AttributeDefinition>();
+        var attributeDefaults = new List<AttributeDefault>();
+        var attributeValues = new List<AttributeValue>();
+        var valueDescriptions = new List<ValueDescription>();
+
+        foreach (var s in statements)
+        {
+            switch (s.Kind)
+            {
+                case ToplevelStatement.Kinds.Version: version = s.Version; break;
+                case ToplevelStatement.Kinds.NewSymbols: newSymbols = s.NewSymbols; break;
+                case ToplevelStatement.Kinds.BitTiming: break;
+                case ToplevelStatement.Kinds.Nodes: nodes = s.Nodes; break;
+                case ToplevelStatement.Kinds.Message: messages.Add(s.Message!); break;
+                case ToplevelStatement.Kinds.Comment: comments.Add(s.Comment!); break;
+                case ToplevelStatement.Kinds.AttributeDefinition: attributeDefinitions.Add(s.AttributeDefinition!); break;
+                case ToplevelStatement.Kinds.AttributeDefault: attributeDefaults.Add(s.AttributeDefault!); break;
+                case ToplevelStatement.Kinds.AttributeValue: attributeValues.Add(s.AttributeValue!); break;
+                case ToplevelStatement.Kinds.ValueDescription: valueDescriptions.Add(s.ValueDescription!); break;
+            }
+        }
+
+        return new ParsedDb(
+            version ?? new Version(""),
+            newSymbols ?? new NewSymbols([]),
+            nodes ?? new Nodes([]),
+            messages.OrderBy(m => m.Header.Id).ToArray(),
+            attributeDefinitions.ToArray(),
+            attributeDefaults.ToArray(),
+            attributeValues.ToArray(),
+            valueDescriptions.ToArray(),
+            comments.ToArray(),
+            statements.Where(s => s.Kind == ToplevelStatement.Kinds.Unknown)
+                .Select(s => s.UnknownKeyword!)
+                .ToArray());
+    }
 }
+
+/// <summary>Discriminated union over all top-level statement kinds, in any file order.</summary>
+public sealed record ToplevelStatement(
+    ToplevelStatement.Kinds Kind,
+    Version? Version,
+    NewSymbols? NewSymbols,
+    Nodes? Nodes,
+    Message? Message,
+    CommentBase? Comment,
+    AttributeDefinition? AttributeDefinition,
+    AttributeDefault? AttributeDefault,
+    AttributeValue? AttributeValue,
+    ValueDescription? ValueDescription,
+    string? UnknownKeyword,
+    int UnknownTokenCount)
+{
+    public enum Kinds
+    {
+        Version,
+        NewSymbols,
+        BitTiming,
+        Nodes,
+        Message,
+        Comment,
+        AttributeDefinition,
+        AttributeDefault,
+        AttributeValue,
+        ValueDescription,
+        Unknown
+    }
+
+    public static ToplevelStatement For(Version v) => new(Kinds.Version, v, null, null, null, null, null, null, null, null, null, 0);
+    public static ToplevelStatement For(NewSymbols n) => new(Kinds.NewSymbols, null, n, null, null, null, null, null, null, null, null, 0);
+    public static ToplevelStatement For(Unit _) => new(Kinds.BitTiming, null, null, null, null, null, null, null, null, null, null, 0);
+    public static ToplevelStatement For(Nodes n) => new(Kinds.Nodes, null, null, n, null, null, null, null, null, null, null, 0);
+    public static ToplevelStatement For(Message m) => new(Kinds.Message, null, null, null, m, null, null, null, null, null, null, 0);
+    public static ToplevelStatement For(CommentBase c) => new(Kinds.Comment, null, null, null, null, c, null, null, null, null, null, 0);
+    public static ToplevelStatement For(AttributeDefinition a) => new(Kinds.AttributeDefinition, null, null, null, null, null, a, null, null, null, null, 0);
+    public static ToplevelStatement For(AttributeDefault a) => new(Kinds.AttributeDefault, null, null, null, null, null, null, a, null, null, null, 0);
+    public static ToplevelStatement For(AttributeValue a) => new(Kinds.AttributeValue, null, null, null, null, null, null, null, a, null, null, 0);
+    public static ToplevelStatement For(ValueDescription v) => new(Kinds.ValueDescription, null, null, null, null, null, null, null, null, v, null, 0);
+    public static ToplevelStatement For(UnknownStatement u) => new(Kinds.Unknown, null, null, null, null, null, null, null, null, null, u.Keyword, u.TokenCount);
+}
+
+/// <summary>An unmodeled section: keyword and token count (content skipped but accounted for).</summary>
+public sealed record UnknownStatement(string Keyword, int TokenCount);
 
 public sealed record ValueDescription(int? MessageId, string? SignalName, IImmutableDictionary<long, string> Values);
 
@@ -438,7 +604,8 @@ public record ParsedDb(
     AttributeDefault[] AttributeDefaults,
     AttributeValue[] AttributeValues,
     ValueDescription[] ValueDescriptions,
-    CommentBase[] Comments);
+    CommentBase[] Comments,
+    string[] SkippedStatements);
 
 public record Version(string VersionString);
 

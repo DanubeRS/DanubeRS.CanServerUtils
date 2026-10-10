@@ -370,7 +370,7 @@ BA_DEF_ SG_  "Weird" INT 0.0 100.0;
     public void ParseFailure_ThrowsWithPositionAndContext()
     {
         var database = new Database(new NullLogger<Database>());
-        const string dbc = "VERSION \"\"\n\nNS_ :\n\tCM_\n\nBS_:\n\nBO_ garbage\n";
+        const string dbc = "VERSION \"\"\n\nNS_ :\n	CM_\n\nBS_:\n\nBO_ garbage\n";
         var act = () => database.AddFile(new StringReader(dbc));
         var ex = act.Should().Throw<FormatException>().Which;
         ex.Message.Should().Contain("Failed to parse DBC file at position");
@@ -607,6 +607,142 @@ BO_ 1320 ID528Clocks: 8 Receiver
         database.TryParseBinaryMessage(1320, new byte[] { 0x65, 0x53, 0xF1, 0x00, 0, 0, 0, 0 }, out var value, out _)
             .Should().BeTrue();
         value!.Signals[0].Value.Should().Be(1700000000d);
+    }
+
+
+    // Regression: interleaved sections (CM/VAL between BO_ blocks) no longer drop messages.
+    [Fact]
+    public void InterleavedSections_AllMessagesRetained()
+    {
+        var database = new Database(new NullLogger<Database>());
+        const string dbc = """
+VERSION ""
+
+NS_ :
+	CM_
+
+BS_:
+
+BU_: A
+
+BO_ 100 M1: 8 A
+ SG_ S : 0|8@1+ (1,0) [0|255] ""  A
+
+CM_ BO_ 100 "c";
+
+BO_ 101 M2: 8 A
+ SG_ T : 0|8@1+ (1,0) [0|255] ""  A
+
+VAL_ 101 T 1 "One";
+
+BA_DEF_ BO_  "Cyc" INT 0 65535;
+
+
+""";
+        database.AddFile(new StringReader(dbc));
+
+        database.TryParseBinaryMessage(100, new byte[] { 1, 0, 0, 0, 0, 0, 0, 0 }, out var v100, out var d100)
+            .Should().BeTrue();
+        database.TryParseBinaryMessage(101, new byte[] { 2, 0, 0, 0, 0, 0, 0, 0 }, out var v101, out var d101)
+            .Should().BeTrue();
+        d101!.Signals[0].ValueLookup.Should().NotBeNull(); // interleaved VAL_ retained
+    }
+
+    // Regression: BA_DEF_ before any BO_ block no longer drops all messages.
+    [Fact]
+    public void AttributeDefinitionBeforeMessages_MessagesRetained()
+    {
+        var database = new Database(new NullLogger<Database>());
+        const string dbc = """
+VERSION ""
+
+NS_ :
+	CM_
+
+BS_:
+
+BU_: A
+
+BA_DEF_ BO_  "Cyc" INT 0 65535;
+
+BO_ 160 M: 8 A
+ SG_ S : 0|8@1+ (1,0) [0|255] ""  A
+
+
+""";
+        database.AddFile(new StringReader(dbc));
+        database.TryParseBinaryMessage(160, new byte[] { 9, 0, 0, 0, 0, 0, 0, 0 }, out var v, out var defn)
+            .Should().BeTrue();
+        v!.Signals[0].Value.Should().Be(9);
+        database.AttributeDefinitions.Should().ContainSingle();
+    }
+
+    // Regression: NS_ section is optional (spec); a file without NS_ parses.
+    [Fact]
+    public void MissingNsSection_Parses()
+    {
+        var database = new Database(new NullLogger<Database>());
+        const string dbc = """
+VERSION ""
+
+BS_:
+
+BU_: A
+
+BO_ 100 M: 8 A
+ SG_ S : 0|8@1+ (1,0) [0|255] ""  A
+
+
+""";
+        database.AddFile(new StringReader(dbc));
+        database.TryParseBinaryMessage(100, new byte[8], out var v, out var defn)
+            .Should().BeTrue();
+        v!.Signals.Should().ContainSingle();
+        defn!.Header.Name.Should().Be("M");
+    }
+
+    // Regression: trailing garbage is rejected with a position, not silently ignored.
+    [Fact]
+    public void TrailingGarbage_Rejected()
+    {
+        var database = new Database(new NullLogger<Database>());
+        var dbc = "VERSION \"\"\n\nNS_ :\n	CM_\n\nBS_:\n\nBU_: A\n\nBO_ 100 M: 8 A\n SG_ S : 0|8@1+ (1,0) [0|255] \"\"  A\n\nJUNKJUNK 123\n";
+        var act = () => database.AddFile(new StringReader(dbc));
+        act.Should().Throw<FormatException>()
+            .Which.Message.Should().Contain("Failed to parse DBC file at position");
+    }
+
+    // Regression: unmodeled but well-formed sections are skipped-and-REPORTED, not dropped silently.
+    [Fact]
+    public void UnknownSections_ReportedViaSkipped()
+    {
+        var database = new Database(new NullLogger<Database>());
+        const string dbc = """
+VERSION ""
+
+NS_ :
+	CM_
+
+BS_:
+
+BU_: A
+
+BO_ 100 M: 8 A
+ SG_ S : 0|8@1+ (1,0) [0|255] ""  A
+
+VAL_TABLE_ Tbl 1 "One" 2 "Two";
+ENVVAR_DATA_ Env1 : 4;
+BA_ "VFlag" BO_ 100 1;
+
+
+""";
+        database.AddFile(new StringReader(dbc));
+
+        // VAL_TABLE_ / ENVVAR_DATA_ are unmodeled: skipped and reported.
+        // BA_ is a modeled section (attribute value) — it parses normally.
+        database.SkippedStatements.Should().BeEquivalentTo("VAL_TABLE_", "ENVVAR_DATA_");
+        database.TryParseBinaryMessage(100, new byte[8], out _, out var defn).Should().BeTrue();
+        defn!.Header.Name.Should().Be("M");
     }
 
 }
