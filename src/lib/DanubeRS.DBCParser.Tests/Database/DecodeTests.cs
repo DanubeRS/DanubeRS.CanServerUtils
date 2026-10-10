@@ -796,13 +796,15 @@ BO_ 100 M: 8 A
 SG_MUL_VAL_ 100 Be Be 1 [0|1];
 
 """;
-        // SG_MUL_VAL_ is unmodeled (skipped); Be: start 7, len 8 sawtooth → bits 7..0, MaxBit=7.
-        // A 1-byte frame (bits 0..7) must fit.
         database.AddFile(new StringReader(dbc));
         database.SkippedStatements.Should().Contain("SG_MUL_VAL_");
-        database.TryParseBinaryMessage(100, new byte[] { 0x12 }, out var value, out _)
-            .Should().BeTrue();
-        value!.Signals[0].Value.Should().Be(0x12);
+
+        // The D2 fix itself: start 7 len 8 @0 → sawtooth covers bits 7..0. The old code
+        // overwrote MaxBit with the last visited bit (0); it must be 7 and MinBit 0.
+        database.TryParseBinaryMessage(100, new byte[8], out _, out var defn).Should().BeTrue();
+        defn!.Signals[0].Bounds.MinBit.Should().Be(0);
+        defn.Signals[0].Bounds.MaxBit.Should().Be(7);
+        defn.Signals[0].Bounds.FitsIn(8).Should().BeTrue();  // 1-byte frame fits
     }
 
 }
