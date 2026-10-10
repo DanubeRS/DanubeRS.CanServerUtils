@@ -5,12 +5,21 @@ using System.Text;
 using DanubeRS.DBCParser.Parser;
 using DanubeRS.DBCParser.Tokenizer;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using ValueType = DanubeRS.DBCParser.Parser.ValueType;
 
 namespace DanubeRS.DBCParser;
 
-public class Database(ILogger<Database> logger)
+public class Database
 {
+    private readonly ILogger<Database> _logger;
+
+    public Database(ILogger<Database>? logger = null)
+    {
+        // Pure-library convenience: no explicit logger is fine (dup-ID warnings vanish).
+        _logger = logger ?? NullLogger<Database>.Instance;
+    }
+
     public class SignalDefinition(Message message, Signal signal, ParsedDb db)
     {
         public Signal Signal { get; } = signal;
@@ -176,7 +185,14 @@ public class Database(ILogger<Database> logger)
 
         foreach (var message in parsed.Messages)
         {
-            _messageDefn.TryAdd((uint)message.Header.Id, new MessageDefinition(message, parsed));
+            var id = (uint)message.Header.Id;
+            if (!_messageDefn.TryAdd(id, new MessageDefinition(message, parsed)))
+            {
+                // First definition wins; make the dropped duplicate visible.
+                _logger.LogWarning(
+                    "Duplicate definition for CAN frame {FrameId} ({MessageName}) ignored; keeping the first definition",
+                    message.Header.Id, message.Header.Name);
+            }
         }
     }
 
@@ -190,8 +206,8 @@ public class Database(ILogger<Database> logger)
         }
 
         var bitArray = new BitArray(data);
-        if (logger.IsEnabled(LogLevel.Trace))
-            logger.LogTrace("Data\n{BitArrayData}", GetBitArrayDataForLog(bitArray));
+        if (_logger.IsEnabled(LogLevel.Trace))
+            _logger.LogTrace("Data\n{BitArrayData}", GetBitArrayDataForLog(bitArray));
 
         return defn.IsMultiplexed switch
         {

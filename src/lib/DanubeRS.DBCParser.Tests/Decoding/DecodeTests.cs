@@ -159,8 +159,8 @@ BA_ "CycleTime" BO_ 100 100;
         database.AttributeDefinitions.Should().ContainSingle()
             .Which.Name.Should().Be("CycleTime");
         database.AttributeDefaults.Should().ContainSingle()
-            .Which.Value.Should().BeOfType<DoubleAttributeDefaultValue>()
-            .Which.Value.Should().Be(0d);
+            .Which.Value.Should().BeOfType<IntegerAttributeDefaultValue>()
+            .Which.Value.Should().Be(0);
         database.AttributeValues.Should().ContainSingle()
             .Which.Value.Should().BeOfType<MessageObjectValue>();
         database.Comments.Should().ContainSingle();
@@ -820,6 +820,17 @@ SG_MUL_VAL_ 100 Be Be 1 [0|1];
         ex.Message.Should().Contain("Failed to tokenize DBC file at position");
         ex.Message.Should().Contain("Context:");
         ex.Message.Should().NotContain("ParseException");
+    }
+
+
+    // Regression: the Database constructor requires no explicit logger.
+    [Fact]
+    public void DatabaseConstructor_LoggerOptional()
+    {
+        var database = new Database();
+        database.AddFile(new StringReader($"""{MinimalDbc}"""));
+        database.TryParseBinaryMessage(1, new byte[8], out var value, out var defn).Should().BeTrue();
+        defn!.Header.Name.Should().Be("Status");
     }
 
 }

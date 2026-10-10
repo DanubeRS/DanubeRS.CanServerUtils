@@ -234,7 +234,12 @@ public static class DbcParser
         select new AttributeDefinition(objectType, attributeName, attributeValueType);
 
     private static TokenListParser<DbcTokens, AttributeDefaultValue> IntegerAttributeDefaultValue { get; } =
+        // Numeric tokens arrive as Double even for plain integers (Numerics.DecimalDouble is
+        // matched before Numerics.Integer), so accept either token kind whose text is integral.
+        // Integer tokens must also carry integral text ("1.0" style text stays Double).
         Token.EqualTo(DbcTokens.Integer)
+            .Or(Token.EqualTo(DbcTokens.Double).Where(i =>
+                int.TryParse(i.ToStringValue(), NumberStyles.Integer, CultureInfo.InvariantCulture, out _)))
             .Where(i => int.TryParse(i.ToStringValue(), NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
             .Select(i =>
                 (AttributeDefaultValue)new IntegerAttributeDefaultValue(int.Parse(i.ToStringValue(), CultureInfo.InvariantCulture)));
